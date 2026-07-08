@@ -24,7 +24,6 @@ WORKDIR /app
 ENV NODE_ENV=production
 ENV PORT=3000
 ENV HOSTNAME=0.0.0.0
-ENV DATABASE_URL="file:/app/db/dev.db"
 
 # Install Bun in runner (since we need it to execute telegram listener)
 RUN apk add --no-cache bash curl lsof \
@@ -41,9 +40,6 @@ COPY --from=next-builder /app/package.json ./package.json
 
 # Copy Bun listener service and its dependencies
 COPY --from=bun-builder /app/mini-services/telegram-listener ./mini-services/telegram-listener
-
-# Create db directory and ensure database file exists
-RUN mkdir -p db && touch db/dev.db
 
 EXPOSE 3000 3002
 
