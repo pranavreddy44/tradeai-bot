@@ -1,0 +1,1002 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --color-emerald-400: #34d399;
+  --color-emerald-500: #10b981;
+  --color-emerald-600: #059669;
+
+  /* =========================================
+     STRICT COLOR PALETTE - TradeAI Design System
+     ========================================= */
+  --color-gain: #10b981;
+  --color-gain-light: #34d399;
+  --color-gain-dark: #059669;
+  --color-loss: #ef4444;
+  --color-loss-light: #f87171;
+  --color-loss-dark: #dc2626;
+  --color-warning: #f59e0b;
+  --color-warning-light: #fbbf24;
+  --color-warning-dark: #d97706;
+  --color-info: #0ea5e9;
+  --color-info-light: #38bdf8;
+  --color-info-dark: #0284c7;
+  --color-neutral: #6b7280;
+  --color-neutral-light: #9ca3af;
+  --color-neutral-dark: #4b5563;
+}
+
+:root {
+  --radius: 0.625rem;
+  --background: oklch(0.98 0 0);
+  --foreground: oklch(0.15 0 0);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.15 0 0);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.15 0 0);
+  --primary: oklch(0.205 0 0);
+  --primary-foreground: oklch(0.985 0 0);
+  --secondary: oklch(0.97 0 0);
+  --secondary-foreground: oklch(0.205 0 0);
+  --muted: oklch(0.97 0 0);
+  --muted-foreground: oklch(0.556 0 0);
+  --accent: oklch(0.97 0 0);
+  --accent-foreground: oklch(0.205 0 0);
+  --destructive: oklch(0.577 0.245 27.325);
+  --border: oklch(0.922 0 0);
+  --input: oklch(0.922 0 0);
+  --ring: oklch(0.708 0 0);
+  --chart-1: oklch(0.646 0.222 41.116);
+  --chart-2: oklch(0.6 0.118 184.704);
+  --chart-3: oklch(0.398 0.07 227.392);
+  --chart-4: oklch(0.828 0.189 84.429);
+  --chart-5: oklch(0.769 0.188 70.08);
+  --sidebar: oklch(0.985 0 0);
+  --sidebar-foreground: oklch(0.145 0 0);
+  --sidebar-primary: oklch(0.205 0 0);
+  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-accent: oklch(0.97 0 0);
+  --sidebar-accent-foreground: oklch(0.205 0 0);
+  --sidebar-border: oklch(0.922 0 0);
+  --sidebar-ring: oklch(0.708 0 0);
+}
+
+.dark {
+  --background: oklch(0.13 0.005 260);
+  --foreground: oklch(0.95 0.01 260);
+  --card: oklch(0.17 0.005 260);
+  --card-foreground: oklch(0.95 0.01 260);
+  --popover: oklch(0.17 0.005 260);
+  --popover-foreground: oklch(0.95 0.01 260);
+  --primary: oklch(0.55 0.15 160);
+  --primary-foreground: oklch(0.13 0.005 260);
+  --secondary: oklch(0.22 0.005 260);
+  --secondary-foreground: oklch(0.9 0.01 260);
+  --muted: oklch(0.22 0.005 260);
+  --muted-foreground: oklch(0.7 0.01 260);
+  --accent: oklch(0.22 0.01 160);
+  --accent-foreground: oklch(0.95 0.01 260);
+  --destructive: oklch(0.65 0.2 25);
+  --border: oklch(1 0 0 / 8%);
+  --input: oklch(1 0 0 / 12%);
+  --ring: oklch(0.55 0.15 160);
+  --chart-1: oklch(0.55 0.15 160);
+  --chart-2: oklch(0.65 0.15 50);
+  --chart-3: oklch(0.55 0.2 25);
+  --chart-4: oklch(0.65 0.15 280);
+  --chart-5: oklch(0.7 0.15 200);
+  --sidebar: oklch(0.15 0.005 260);
+  --sidebar-foreground: oklch(0.95 0.01 260);
+  --sidebar-primary: oklch(0.55 0.15 160);
+  --sidebar-primary-foreground: oklch(0.95 0.01 260);
+  --sidebar-accent: oklch(0.22 0.005 260);
+  --sidebar-accent-foreground: oklch(0.95 0.01 260);
+  --sidebar-border: oklch(1 0 0 / 8%);
+  --sidebar-ring: oklch(0.55 0.15 160);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+}
+
+/* =========================================
+   CUSTOM TRADING TERMINAL STYLES
+   ========================================= */
+
+/* Glow Effects */
+.glow-emerald {
+  box-shadow: 0 0 15px rgba(16, 185, 129, 0.15), 0 0 30px rgba(16, 185, 129, 0.05);
+}
+
+.glow-red {
+  box-shadow: 0 0 15px rgba(239, 68, 68, 0.15), 0 0 30px rgba(239, 68, 68, 0.05);
+}
+
+.glow-emerald-strong {
+  box-shadow: 0 0 20px rgba(16, 185, 129, 0.25), 0 0 40px rgba(16, 185, 129, 0.1);
+}
+
+.glow-red-strong {
+  box-shadow: 0 0 20px rgba(239, 68, 68, 0.25), 0 0 40px rgba(239, 68, 68, 0.1);
+}
+
+/* Animated Gradient Border */
+.gradient-border {
+  position: relative;
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.gradient-border::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  padding: 2px;
+  border-radius: inherit;
+  background: linear-gradient(
+    var(--gradient-angle, 90deg),
+    #10b981,
+    #059669,
+    #34d399,
+    #10b981
+  );
+  background-size: 300% 300%;
+  animation: gradient-rotate 4s ease infinite;
+  -webkit-mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+}
+
+.gradient-border-red::before {
+  background: linear-gradient(
+    var(--gradient-angle, 90deg),
+    #ef4444,
+    #dc2626,
+    #f87171,
+    #ef4444
+  );
+  background-size: 300% 300%;
+}
+
+@keyframes gradient-rotate {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+/* Ticker Scroll Animation */
+.ticker-scroll {
+  display: flex;
+  animation: ticker-scroll 30s linear infinite;
+}
+
+.ticker-scroll:hover {
+  animation-play-state: paused;
+}
+
+@keyframes ticker-scroll {
+  0% { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
+}
+
+/* Card Shine Effect */
+.card-shine {
+  position: relative;
+  overflow: hidden;
+}
+
+.card-shine::after {
+  content: '';
+  position: absolute;
+  top: -50%;
+  left: -50%;
+  width: 200%;
+  height: 200%;
+  background: linear-gradient(
+    45deg,
+    transparent 40%,
+    rgba(255, 255, 255, 0.03) 45%,
+    rgba(255, 255, 255, 0.05) 50%,
+    rgba(255, 255, 255, 0.03) 55%,
+    transparent 60%
+  );
+  transform: translateX(-100%);
+  transition: transform 0.6s ease;
+  pointer-events: none;
+}
+
+.card-shine:hover::after {
+  transform: translateX(100%);
+}
+
+/* Pulse Ring Animation */
+@keyframes pulse-ring {
+  0% { transform: scale(1); opacity: 1; }
+  100% { transform: scale(2.5); opacity: 0; }
+}
+
+.pulse-ring {
+  position: relative;
+}
+
+.pulse-ring::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: inherit;
+  animation: pulse-ring 1.5s ease-out infinite;
+}
+
+/* Custom Scrollbar - Dark Theme Trading Terminal */
+.custom-scrollbar::-webkit-scrollbar {
+  width: 5px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* Hide scrollbar completely but allow scrolling */
+.hide-scrollbar {
+  -ms-overflow-style: none;  /* IE and Edge */
+  scrollbar-width: none;  /* Firefox */
+}
+.hide-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(16, 185, 129, 0.2);
+  border-radius: 3px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: rgba(16, 185, 129, 0.35);
+}
+
+/* Gradient Header Border */
+.header-gradient-border {
+  background: linear-gradient(90deg, #10b981, #059669, #34d399, #10b981);
+  height: 1px;
+  background-size: 200% 100%;
+  animation: gradient-shift 3s ease infinite;
+}
+
+@keyframes gradient-shift {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+/* Row Hover Glow */
+.row-glow:hover {
+  box-shadow: inset 0 0 30px rgba(16, 185, 129, 0.03);
+}
+
+/* Sentiment Gauge */
+.sentiment-gauge-bg {
+  background: conic-gradient(
+    #ef4444 0deg 90deg,
+    #f59e0b 90deg 180deg,
+    #10b981 180deg 270deg,
+    #10b981 270deg 360deg
+  );
+}
+
+/* Floating Animation */
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-4px); }
+}
+
+.float-animation {
+  animation: float 3s ease-in-out infinite;
+}
+
+/* Confidence bar animation */
+@keyframes confidence-fill {
+  from { width: 0%; }
+  to { width: var(--confidence-width); }
+}
+
+.confidence-bar-fill {
+  animation: confidence-fill 1s ease-out forwards;
+}
+
+/* Ensure iframe chart fills container */
+iframe {
+  border-radius: var(--radius);
+}
+
+/* Smooth transitions for dark mode */
+html {
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+/* Market ticker item */
+.ticker-item {
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+/* Smooth page transitions */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.3s ease-out;
+}
+
+/* Pulsing status dot */
+@keyframes status-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+.status-pulse {
+  animation: status-pulse 2s ease-in-out infinite;
+}
+
+/* Gradient text */
+.gradient-text {
+  background: linear-gradient(135deg, #10b981, #34d399, #6ee7b7);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* Shimmer loading effect */
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+.shimmer {
+  background: linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.05) 50%, transparent 100%);
+  background-size: 200% 100%;
+  animation: shimmer 2s ease-in-out infinite;
+}
+
+/* Hover lift effect */
+.hover-lift {
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+.hover-lift:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+/* Glass morphism effect */
+.glass {
+  background: rgba(255, 255, 255, 0.05);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+/* =========================================
+   PROFESSIONAL TRADING TERMINAL STYLES v2
+   ========================================= */
+
+/* Trading Card - subtle border glow + hover elevation */
+.trading-card {
+  position: relative;
+  border-radius: var(--radius);
+  border: 1px solid oklch(1 0 0 / 6%);
+  transition: transform 0.2s ease, box-shadow 0.25s ease, border-color 0.25s ease;
+  background: var(--card);
+}
+.trading-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 25px -5px rgba(0, 0, 0, 0.25), 0 4px 10px -6px rgba(0, 0, 0, 0.15);
+  border-color: oklch(1 0 0 / 12%);
+}
+
+/* Metric Value - large prominent numeric display */
+.metric-value {
+  font-size: 1.5rem;
+  line-height: 1.2;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+  font-feature-settings: "tnum";
+}
+.metric-value-sm {
+  font-size: 1.125rem;
+  line-height: 1.3;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+}
+
+/* Section Header - consistent section titles */
+.section-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted-foreground);
+}
+
+/* Glass Card - frosted glass for important panels */
+.glass-card {
+  background: rgba(255, 255, 255, 0.03);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: var(--radius);
+}
+.dark .glass-card {
+  background: rgba(255, 255, 255, 0.02);
+  border-color: rgba(255, 255, 255, 0.05);
+}
+
+/* Data Row - alternating background for data tables */
+.data-row {
+  padding: 0.5rem 1rem;
+  transition: background-color 0.15s ease;
+}
+.data-row:nth-child(odd) {
+  background: transparent;
+}
+.data-row:nth-child(even) {
+  background: oklch(1 0 0 / 2%);
+}
+.dark .data-row:nth-child(even) {
+  background: rgba(255, 255, 255, 0.015);
+}
+.data-row:hover {
+  background: oklch(1 0 0 / 4%);
+}
+.dark .data-row:hover {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+/* Gradient Top Border Utilities */
+.gradient-top-emerald {
+  position: relative;
+  overflow: hidden;
+}
+.gradient-top-emerald::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, #10b981, #34d399, #6ee7b7, #34d399, #10b981);
+  background-size: 200% 100%;
+  animation: gradient-shift 3s ease infinite;
+}
+
+.gradient-top-amber {
+  position: relative;
+  overflow: hidden;
+}
+.gradient-top-amber::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, #f59e0b, #fbbf24, #fcd34d, #fbbf24, #f59e0b);
+  background-size: 200% 100%;
+  animation: gradient-shift 3s ease infinite;
+}
+
+.gradient-top-red {
+  position: relative;
+  overflow: hidden;
+}
+.gradient-top-red::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, #ef4444, #f87171, #fca5a5, #f87171, #ef4444);
+  background-size: 200% 100%;
+  animation: gradient-shift 3s ease infinite;
+}
+
+.gradient-top-sky {
+  position: relative;
+  overflow: hidden;
+}
+.gradient-top-sky::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, #0ea5e9, #38bdf8, #7dd3fc, #38bdf8, #0ea5e9);
+  background-size: 200% 100%;
+  animation: gradient-shift 3s ease infinite;
+}
+
+.gradient-top-purple {
+  position: relative;
+  overflow: hidden;
+}
+.gradient-top-purple::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, #8b5cf6, #a78bfa, #c4b5fd, #a78bfa, #8b5cf6);
+  background-size: 200% 100%;
+  animation: gradient-shift 3s ease infinite;
+}
+
+/* Badge Glow - subtle glow for important badges */
+.badge-glow {
+  box-shadow: 0 0 8px rgba(16, 185, 129, 0.3), 0 0 16px rgba(16, 185, 129, 0.1);
+}
+.badge-glow-amber {
+  box-shadow: 0 0 8px rgba(245, 158, 11, 0.3), 0 0 16px rgba(245, 158, 11, 0.1);
+}
+.badge-glow-red {
+  box-shadow: 0 0 8px rgba(239, 68, 68, 0.3), 0 0 16px rgba(239, 68, 68, 0.1);
+}
+.badge-glow-sky {
+  box-shadow: 0 0 8px rgba(14, 165, 233, 0.3), 0 0 16px rgba(14, 165, 233, 0.1);
+}
+.badge-glow-purple {
+  box-shadow: 0 0 8px rgba(139, 92, 246, 0.3), 0 0 16px rgba(139, 92, 246, 0.1);
+}
+
+/* Card Top Accent Variants */
+.card-top-accent {
+  position: relative;
+  overflow: hidden;
+}
+.card-top-accent::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  border-radius: var(--radius) var(--radius) 0 0;
+}
+.card-top-accent-emerald::after {
+  background: linear-gradient(90deg, #059669, #10b981, #34d399);
+}
+.card-top-accent-amber::after {
+  background: linear-gradient(90deg, #d97706, #f59e0b, #fbbf24);
+}
+.card-top-accent-red::after {
+  background: linear-gradient(90deg, #dc2626, #ef4444, #f87171);
+}
+.card-top-accent-sky::after {
+  background: linear-gradient(90deg, #0284c7, #0ea5e9, #38bdf8);
+}
+.card-top-accent-purple::after {
+  background: linear-gradient(90deg, #7c3aed, #8b5cf6, #a78bfa);
+}
+
+/* Animate In with staggered delays */
+@keyframes animate-in-up {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-in {
+  animation: animate-in-up 0.4s ease-out both;
+}
+.animate-in-delay-1 { animation-delay: 0.05s; }
+.animate-in-delay-2 { animation-delay: 0.1s; }
+.animate-in-delay-3 { animation-delay: 0.15s; }
+.animate-in-delay-4 { animation-delay: 0.2s; }
+.animate-in-delay-5 { animation-delay: 0.25s; }
+.animate-in-delay-6 { animation-delay: 0.3s; }
+.animate-in-delay-7 { animation-delay: 0.35s; }
+.animate-in-delay-8 { animation-delay: 0.4s; }
+
+/* Tab Bottom Border Indicator */
+.tab-indicator {
+  position: relative;
+}
+.tab-indicator::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 0;
+  height: 2px;
+  background: #10b981;
+  border-radius: 1px;
+  transition: width 0.25s ease;
+}
+.tab-indicator[data-state="active"]::after,
+.tab-indicator.active::after {
+  width: 70%;
+}
+
+/* Stat Card - gradient top border with proper spacing */
+.stat-card {
+  position: relative;
+  overflow: hidden;
+  border-radius: var(--radius);
+  padding: 1rem;
+  text-align: center;
+}
+.stat-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  border-radius: var(--radius) var(--radius) 0 0;
+}
+.stat-card-emerald::before {
+  background: linear-gradient(90deg, #059669, #10b981, #34d399);
+}
+.stat-card-amber::before {
+  background: linear-gradient(90deg, #d97706, #f59e0b, #fbbf24);
+}
+.stat-card-red::before {
+  background: linear-gradient(90deg, #dc2626, #ef4444, #f87171);
+}
+.stat-card-sky::before {
+  background: linear-gradient(90deg, #0284c7, #0ea5e9, #38bdf8);
+}
+.stat-card-purple::before {
+  background: linear-gradient(90deg, #7c3aed, #8b5cf6, #a78bfa);
+}
+
+/* Subtle background grid pattern for main content */
+.bg-grid-pattern {
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.02) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.02) 1px, transparent 1px);
+  background-size: 40px 40px;
+}
+
+/* =========================================
+   BETTER TEXT CONTRAST UTILITIES
+   ========================================= */
+
+/* Main text - improved contrast for dark theme readability */
+.text-primary-readable {
+  color: oklch(0.9 0.01 260);
+}
+
+/* Secondary text - good contrast for supporting content */
+.text-secondary-readable {
+  color: oklch(0.75 0.01 260);
+}
+
+/* Muted text - minimum acceptable contrast for labels */
+.text-muted-readable {
+  color: oklch(0.6 0.01 260);
+}
+
+/* =========================================
+   SPARKLINE MINI TREND
+   ========================================= */
+
+.sparkline-mini {
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 16px;
+}
+.sparkline-mini .spark-dot {
+  width: 3px;
+  border-radius: 1px;
+  transition: height 0.3s ease;
+}
+
+/* Activity item highlight */
+.activity-item {
+  padding: 0.5rem 0.625rem;
+  border-radius: 0.375rem;
+  transition: background-color 0.15s ease;
+}
+.activity-item:hover {
+  background: oklch(1 0 0 / 3%);
+}
+.dark .activity-item:hover {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+/* =========================================
+   STYLING OVERHAUL UTILITIES (Task 4+5)
+   ========================================= */
+
+/* Better Section Separator - elegant gradient divider */
+.section-separator {
+  height: 1px;
+  background: linear-gradient(90deg, transparent 0%, oklch(1 0 0 / 8%) 20%, oklch(1 0 0 / 12%) 50%, oklch(1 0 0 / 8%) 80%, transparent 100%);
+  margin: 1rem 0;
+}
+
+/* Depth Bar Animation for market depth */
+.depth-bar {
+  transition: width 0.5s ease-out;
+}
+
+/* Hover Scale Effect for interactive cards */
+.hover-scale {
+  transition: transform 0.15s ease, box-shadow 0.2s ease;
+}
+.hover-scale:hover {
+  transform: scale(1.02);
+}
+
+/* Better badge styling for trade actions */
+.badge-buy {
+  background: rgba(16, 185, 129, 0.15);
+  color: #34d399;
+  border: 1px solid rgba(16, 185, 129, 0.2);
+}
+.badge-sell {
+  background: rgba(239, 68, 68, 0.15);
+  color: #f87171;
+  border: 1px solid rgba(239, 68, 68, 0.2);
+}
+
+/* Table row alternating with better contrast */
+.table-row-hover:hover {
+  background: rgba(16, 185, 129, 0.04) !important;
+}
+
+/* Metric card glow on hover */
+.metric-card-glow:hover {
+  box-shadow: 0 0 20px rgba(16, 185, 129, 0.08), 0 0 40px rgba(16, 185, 129, 0.04);
+}
+
+/* =========================================
+   VALUE FLASH ANIMATIONS (Task 4+5)
+   ========================================= */
+
+@keyframes flash-green {
+  0% { background-color: rgba(16, 185, 129, 0.2); }
+  100% { background-color: transparent; }
+}
+.value-flash-green {
+  animation: flash-green 0.5s ease-out;
+}
+
+@keyframes flash-red {
+  0% { background-color: rgba(239, 68, 68, 0.2); }
+  100% { background-color: transparent; }
+}
+.value-flash-red {
+  animation: flash-red 0.5s ease-out;
+}
+
+/* Blur transition for tab content switches */
+.blur-transition {
+  transition: filter 0.15s ease;
+}
+.blur-transition.entering {
+  filter: blur(2px);
+}
+
+/* Refresh button hover rotate */
+.refresh-hover:hover svg {
+  transform: rotate(180deg);
+  transition: transform 0.4s ease;
+}
+.refresh-hover svg {
+  transition: transform 0.4s ease;
+}
+
+/* Theme toggle hover scale */
+.theme-toggle-hover:hover svg {
+  transform: scale(1.15);
+  transition: transform 0.2s ease;
+}
+.theme-toggle-hover svg {
+  transition: transform 0.2s ease;
+}
+
+/* Skeleton shimmer effect */
+.skeleton-shimmer {
+  background: linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.04) 50%, transparent 100%);
+  background-size: 200% 100%;
+  animation: shimmer 2s ease-in-out infinite;
+}
+
+/* =========================================
+   TRADEAI DESIGN SYSTEM UTILITIES (Task 2-a)
+   ========================================= */
+
+/* Consistent Badge Colors for BUY/SELL */
+.badge-buy-consistent {
+  background: rgba(16, 185, 129, 0.15);
+  color: #34d399;
+  border: 1px solid rgba(16, 185, 129, 0.25);
+}
+
+.badge-sell-consistent {
+  background: rgba(239, 68, 68, 0.15);
+  color: #f87171;
+  border: 1px solid rgba(239, 68, 68, 0.25);
+}
+
+/* Typography Scale:
+   - Header: text-lg font-bold tracking-tight
+   - Primary data: text-base font-semibold font-mono tabular-nums
+   - Secondary: text-sm text-muted-foreground
+   - Tertiary/Labels: text-xs tracking-wide uppercase text-muted-foreground
+*/
+.text-header {
+  font-size: 1.125rem;
+  font-weight: 700;
+  letter-spacing: -0.025em;
+  line-height: 1.3;
+}
+
+.text-data-primary {
+  font-size: 1rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+}
+
+.text-data-secondary {
+  font-size: 0.875rem;
+  font-weight: 400;
+  color: var(--muted-foreground);
+}
+
+.text-label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--muted-foreground);
+}
+
+.text-label-xs {
+  font-size: 0.625rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted-foreground);
+}
+
+/* Focus-visible ring styles for keyboard navigation */
+.focus-ring:focus-visible {
+  outline: 2px solid #10b981;
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* Consistent hover transition for all interactive elements */
+.interactive-hover {
+  transition: all 0.2s ease;
+}
+.interactive-hover:hover {
+  transform: translateY(-1px);
+}
+.interactive-hover:active {
+  transform: translateY(0);
+}
+
+/* Consistent card styling */
+.card-consistent {
+  border-radius: 0.75rem;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px -1px rgba(0, 0, 0, 0.1);
+  transition: box-shadow 0.2s ease, border-color 0.2s ease;
+}
+.card-consistent:hover {
+  box-shadow: 0 4px 12px -2px rgba(0, 0, 0, 0.15), 0 2px 6px -2px rgba(0, 0, 0, 0.08);
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+/* Market Closed Banner */
+.market-closed-banner {
+  background: linear-gradient(135deg, rgba(239, 68, 68, 0.08) 0%, rgba(239, 68, 68, 0.03) 100%);
+  border: 1px solid rgba(239, 68, 68, 0.15);
+  border-radius: 0.5rem;
+}
+
+.market-open-banner {
+  background: linear-gradient(135deg, rgba(16, 185, 129, 0.08) 0%, rgba(16, 185, 129, 0.03) 100%);
+  border: 1px solid rgba(16, 185, 129, 0.15);
+  border-radius: 0.5rem;
+}
+
+/* Price value alignment - ensures all monetary values are monospaced and right-aligned */
+.price-value {
+  font-family: var(--font-geist-mono), monospace;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+}
+
+/* Depth row styling with proper spacing */
+.depth-row {
+  padding: 0.5rem 0;
+  min-height: 2rem;
+  display: flex;
+  align-items: center;
+}
+
+/* Consistent section spacing */
+.section-gap {
+  margin-top: 1rem;
+}
+
+.section-gap-sm {
+  margin-top: 0.75rem;
+}
+
+/* Consistent card padding */
+.card-padding {
+  padding: 1rem;
+}
+
+.card-padding-lg {
+  padding: 1.25rem;
+}

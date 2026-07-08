@@ -1,0 +1,13 @@
+{
+  "name": "telegram-listener",
+  "version": "1.0.0",
+  "description": "Telegram MTProto Userbot Listener - reads messages from private channels using GramJS and forwards them for AI analysis",
+  "main": "index.ts",
+  "scripts": {
+    "dev": "bun --hot index.ts"
+  },
+  "dependencies": {
+    "input": "^1.0.1",
+    "telegram": "^2.26.22"
+  }
+}

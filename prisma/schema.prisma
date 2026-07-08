@@ -1,0 +1,204 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model TradeSignal {
+  id          String   @id @default(cuid())
+  symbol      String   // e.g. "RELIANCE", "TCS", "INFY"
+  exchange    String   @default("NSE") // NSE or BSE
+  action      String   // BUY or SELL
+  source      String   // "ai-news", "ai-technical", "telegram", "manual"
+  confidence  Int      @default(50) // 0-100
+  entryPrice  Float    // suggested entry price
+  targetPrice Float?   // target price
+  stopLoss    Float?   // stop loss price
+  quantity    Int      @default(1)
+  reasoning   String?  // AI reasoning or Telegram message
+  status      String   @default("pending") // pending, executed, closed, expired
+  pnl         Float?   // profit/loss when closed
+  modelName   String?  // which AI model generated this
+  channelId   String?  // Telegram channel ID if from telegram
+  tradeType   String?  // INTRADAY, F&O, SWING, DELIVERY, etc.
+  postUrl     String?  // Link to original message for verification
+  sourceTimestamp DateTime? // Telegram message time or news publish time
+  fusionSources   String?  // comma-separated list e.g. "telegram,news" when convergence detected
+  validityScore   Int?     // last computed validity score 0-100
+  userOutcome     String?  // "profit" | "loss" | "missed" — set by user feedback
+  outcomeNotes    String?  // optional user note on the outcome
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  positions   Position[]
+  brokerOrder BrokerOrder?
+
+  @@index([status])
+  @@index([createdAt])
+  @@index([symbol, action])
+}
+
+model Position {
+  id           String   @id @default(cuid())
+  symbol       String
+  exchange     String   @default("NSE")
+  action       String   // BUY or SELL
+  quantity     Int
+  entryPrice   Float
+  currentPrice Float?
+  pnl          Float?
+  pnlPercent   Float?
+  status       String   @default("open") // open, closed
+  signalId     String?
+  closedAt     DateTime?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  signal       TradeSignal? @relation(fields: [signalId], references: [id])
+
+  @@index([signalId])
+}
+
+model AIDecision {
+  id          String   @id @default(cuid())
+  model       String   // which AI model was used
+  inputType   String   // "news", "telegram", "technical"
+  inputData   String   // the input that was analyzed
+  output      String   // AI response
+  symbol      String?
+  action      String?  // BUY, SELL, HOLD
+  confidence  Int?     @default(50)
+  signalId    String?  // if this led to a signal
+  createdAt   DateTime @default(now())
+
+  @@index([createdAt])
+}
+
+model NewsItem {
+  id          String   @id @default(cuid())
+  title       String
+  content     String?
+  source      String   // URL or source name
+  sentiment   String?  // positive, negative, neutral
+  sentimentScore Float? // -1 to 1
+  relatedSymbols String? // comma-separated symbols
+  analyzed    Boolean  @default(false)
+  aiSummary   String?  // AI analysis of this news
+  publishedAt DateTime?
+  createdAt   DateTime @default(now())
+
+  @@index([relatedSymbols])
+}
+
+model BotSetting {
+  id    String @id @default(cuid())
+  key   String @unique
+  value String
+  updatedAt DateTime @updatedAt
+}
+
+model TelegramChannel {
+  id          String   @id @default(cuid())
+  name        String
+  channelId   String   // Telegram channel ID or username
+  isActive    Boolean  @default(true)
+  lastMessageId String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model WatchlistItem {
+  id        String   @id @default(cuid())
+  symbol    String
+  exchange  String   @default("NSE")
+  name      String?  // Company name
+  addedAt   DateTime @default(now())
+}
+
+model Strategy {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  rules       String   // JSON string of rules
+  isActive    Boolean  @default(false)
+  symbol      String?  // optional, null means apply to all
+  action      String   @default("BUY") // BUY or SELL
+  confidence  Int      @default(70)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model TradeJournal {
+  id          String    @id @default(cuid())
+  symbol      String
+  exchange    String    @default("NSE")
+  action      String    // BUY or SELL
+  entryPrice  Float
+  exitPrice   Float?
+  quantity    Int
+  entryDate   DateTime
+  exitDate    DateTime?
+  pnl         Float?
+  emotion     String?   // Confident, Anxious, FOMO, Greedy, Fearful, Calm
+  strategy    String?   // User's strategy name
+  notes       String?   // Trade notes
+  lessons     String?   // Lessons learned
+  rating      Int       @default(3) // 1-5 stars, how well they followed their plan
+  tags        String?   // Comma-separated tags
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
+
+model ChatMessage {
+  id        String   @id @default(cuid())
+  role      String   // "user" or "assistant"
+  content   String
+  model     String   @default("glm-4-plus")
+  createdAt DateTime @default(now())
+}
+
+model BrokerCredential {
+  id           String   @id @default(cuid())
+  broker       String   // "groww" or "zerodha"
+  apiKey       String   // Groww: API key / TOTP token; Zerodha: API key
+  apiSecret    String?  // Groww: API secret (for approval flow); Zerodha: API secret
+  accessToken  String?  // Generated access token
+  authMethod   String   @default("approval") // "approval", "totp", or "direct"
+  totpSecret   String?  // TOTP secret for generating TOTP codes
+  isActive     Boolean  @default(true)
+  userId       String?  // Broker user ID
+  userName     String?  // Broker user name
+  lastVerified DateTime?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model BrokerOrder {
+  id              String   @id @default(cuid())
+  broker          String   @default("groww")
+  growwOrderId    String?  // Groww order ID
+  orderRefId      String?  // Order reference ID
+  signalId        String?  @unique // Linked TradeSignal ID
+  tradingSymbol   String
+  exchange        String   @default("NSE")
+  segment         String   @default("CASH")
+  product         String   @default("MIS")
+  orderType       String   @default("MARKET")
+  transactionType String   // BUY or SELL
+  quantity        Int
+  price           Float?
+  triggerPrice    Float?
+  status          String   @default("pending") // pending, submitted, filled, cancelled, rejected
+  filledQty       Int      @default(0)
+  avgFillPrice    Float?
+  remark          String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  signal          TradeSignal? @relation(fields: [signalId], references: [id])
+}
+
