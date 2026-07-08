@@ -1,0 +1,18 @@
+version: '3.8'
+
+services:
+  app:
+    build: .
+    ports:
+      - "3000:3000"
+      - "3002:3002"
+    volumes:
+      - app-db:/app/db
+    environment:
+      - NODE_ENV=production
+      - DATABASE_URL=file:/app/db/dev.db
+      # Populate Groq, Telegram APIs or other secrets in your deploy environment
+    restart: always
+
+volumes:
+  app-db:
