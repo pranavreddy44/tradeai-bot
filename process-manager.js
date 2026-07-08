@@ -45,9 +45,11 @@ function startMiniService() {
   });
 
   miniProcess.stdout.on('data', (data) => {
+    process.stdout.write(data);
     if (logStream) logStream.write(data);
   });
   miniProcess.stderr.on('data', (data) => {
+    process.stderr.write(data);
     if (logStream) logStream.write(data);
   });
 
@@ -87,9 +89,11 @@ function startNextDev() {
   });
 
   nextProcess.stdout.on('data', (data) => {
+    process.stdout.write(data);
     if (logStream) logStream.write(data);
   });
   nextProcess.stderr.on('data', (data) => {
+    process.stderr.write(data);
     if (logStream) logStream.write(data);
   });
 
@@ -113,7 +117,11 @@ function startNextProd() {
   }
 
   log('Starting Next.js production server on port 3000...');
-  nextProcess = spawn('node', ['.next/standalone/server.js'], {
+  const serverPath = fs.existsSync(path.join(NEXT_DIR, 'server.js'))
+    ? 'server.js'
+    : '.next/standalone/server.js';
+
+  nextProcess = spawn('node', [serverPath], {
     cwd: NEXT_DIR,
     env: {
       ...process.env,
@@ -126,9 +134,11 @@ function startNextProd() {
   });
 
   nextProcess.stdout.on('data', (data) => {
+    process.stdout.write(data);
     if (logStream) logStream.write(data);
   });
   nextProcess.stderr.on('data', (data) => {
+    process.stderr.write(data);
     if (logStream) logStream.write(data);
   });
 
