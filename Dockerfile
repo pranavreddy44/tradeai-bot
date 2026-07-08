@@ -3,7 +3,7 @@ FROM node:20-alpine AS next-builder
 WORKDIR /app
 RUN apk add --no-cache libc6-compat
 COPY package*.json ./
-RUN npm ci
+RUN npm install
 COPY . .
 # Run db generate before build to compile prisma models
 RUN npx prisma generate
