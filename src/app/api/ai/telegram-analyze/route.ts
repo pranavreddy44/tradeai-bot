@@ -54,7 +54,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const method = result.source === 'rule' ? 'rule-based' : (result.modelName || 'huggingface-qwen3');
+    const method = result.source === 'rule' ? 'rule-based' : (result.modelName || 'omniroute-auto');
 
     // Step 2: Save AI decision regardless of validity
     const aiDecision = await db.aIDecision.create({

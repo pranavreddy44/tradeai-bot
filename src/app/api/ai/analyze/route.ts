@@ -53,7 +53,7 @@ export async function POST(request: NextRequest) {
       analysis.summary += ` Saved only signals with confidence >= ${minimumSignalConfidence}%.`;
     }
 
-    const method = analysis.modelName || 'huggingface-qwen3';
+    const method = analysis.modelName || 'omniroute-auto';
 
     // Step 5: Save AI decision
     const aiDecision = await db.aIDecision.create({

@@ -244,6 +244,7 @@ export interface BatchTelegramParseResult {
       confidence: number;
     }>;
     reasoning?: string;
+    modelName?: string;
   }>;
 }
 
@@ -288,53 +289,32 @@ Rules:
 - If no clear signals exist, return empty signals array
 - In reasoning, mention which source(s) support the signal (news/telegram/both)`;
 
-export const HUGGINGFACE_TEXT_MODELS = [
+export const OMNIROUTE_TEXT_MODELS = [
   {
-    id: 'deepseek-ai/DeepSeek-R1-Distill-Qwen-32B',
-    name: 'DeepSeek-R1 Distill Qwen 32B',
-    description: 'State-of-the-art open-source reasoning model. Highly recommended for trade reasoning and parsing.',
+    id: 'auto',
+    name: 'OmniRoute Auto',
+    description: 'Smart routing — OmniRoute picks the best available provider/model with auto-fallback.',
   },
   {
-    id: 'meta-llama/Llama-3.3-70B-Instruct',
-    name: 'Llama 3.3 70B Instruct',
-    description: 'Extremely powerful 70B parameter general purpose and instruction model.',
+    id: 'auto/coding',
+    name: 'Coding Combo',
+    description: 'Priority + fill-first routing optimized for coding and agentic workloads.',
   },
   {
-    id: 'Qwen/Qwen2.5-72B-Instruct',
-    name: 'Qwen 2.5 72B Instruct',
-    description: 'Excellent 72B reasoning model for general analysis and correlation.',
+    id: 'auto/cheap',
+    name: 'Cheap Combo',
+    description: 'Cost-optimized routing — drains free tiers before paid APIs.',
   },
   {
-    id: 'Qwen/Qwen2.5-Coder-32B-Instruct',
-    name: 'Qwen 2.5 Coder 32B',
-    description: 'Highly accurate 32B reasoning model optimized for structural and logical parsing.',
+    id: 'auto/fast',
+    name: 'Fast Combo',
+    description: 'Lowest-latency routing across providers.',
   },
 ] as const;
 
-export const DEFAULT_HUGGINGFACE_MODEL = HUGGINGFACE_TEXT_MODELS[0].id;
+export const DEFAULT_OMNIROUTE_MODEL = OMNIROUTE_TEXT_MODELS[0].id;
 
-export const GEMINI_TEXT_MODELS = [
-  {
-    id: 'gemini-3.5-flash',
-    name: 'Gemini 3.5 Flash',
-    description: 'Latest flagship production model. Blazing fast speed, outstanding agentic reasoning, and a 1M token context window.',
-  },
-  {
-    id: 'gemini-3.1-pro',
-    name: 'Gemini 3.1 Pro',
-    description: 'Flagship reasoning model for highly complex logical extraction, trade validation, and correlation.',
-  },
-  {
-    id: 'gemini-1.5-flash',
-    name: 'Gemini 1.5 Flash (Legacy)',
-    description: 'Stable legacy model. Fast and lightweight.',
-  },
-  {
-    id: 'gemini-1.5-pro',
-    name: 'Gemini 1.5 Pro (Legacy)',
-    description: 'Stable legacy pro model for deep analysis.',
-  },
-] as const;
+export const DEFAULT_OMNIROUTE_BASE_URL = 'http://localhost:20128/v1/chat/completions';
 
 export const GROQ_TEXT_MODELS = [
   {
@@ -368,7 +348,7 @@ interface ChatCompletionOptions {
 }
 
 export interface ConfiguredAIProvider {
-  provider: 'huggingface' | 'gemini' | 'groq';
+  provider: 'omniroute' | 'groq';
   model: string;
   hasToken: boolean;
   tokenSource: 'env' | 'settings' | 'none';
@@ -384,20 +364,9 @@ async function getBotSetting(key: string): Promise<string | null> {
 }
 
 export async function getConfiguredAIProvider(): Promise<ConfiguredAIProvider> {
-  const provider = (await getBotSetting('aiProvider')) as 'huggingface' | 'gemini' | 'groq' || 'huggingface';
-  
-  if (provider === 'gemini') {
-    const envToken = process.env.GEMINI_API_KEY || '';
-    const settingsToken = await getBotSetting('geminiApiKey');
-    const configuredModel = process.env.GEMINI_MODEL || await getBotSetting('geminiModel') || 'gemini-3.5-flash';
-    const token = envToken || settingsToken || '';
-    return {
-      provider: 'gemini',
-      model: configuredModel,
-      hasToken: Boolean(token),
-      tokenSource: envToken ? 'env' : settingsToken ? 'settings' : 'none',
-    };
-  } else if (provider === 'groq') {
+  const provider = ((await getBotSetting('aiProvider')) || 'omniroute') as 'omniroute' | 'groq';
+
+  if (provider === 'groq') {
     const envToken = process.env.GROQ_API_KEY || '';
     const settingsToken = await getBotSetting('groqApiKey');
     const configuredModel = process.env.GROQ_MODEL || await getBotSetting('groqModel') || 'llama-3.3-70b-versatile';
@@ -409,15 +378,16 @@ export async function getConfiguredAIProvider(): Promise<ConfiguredAIProvider> {
       tokenSource: envToken ? 'env' : settingsToken ? 'settings' : 'none',
     };
   } else {
-    // huggingface
-    const envToken = process.env.HF_TOKEN || process.env.HUGGINGFACE_API_KEY || '';
-    const settingsToken = await getBotSetting('huggingFaceToken');
-    const configuredModel = process.env.HF_MODEL || await getBotSetting('huggingFaceModel') || DEFAULT_HUGGINGFACE_MODEL;
+    // omniroute (also migrates any legacy huggingface/gemini aiProvider value)
+    const envToken = process.env.OMNIROUTE_KEY || '';
+    const settingsToken = await getBotSetting('omniRouteKey');
+    const configuredModel = process.env.OMNIROUTE_MODEL || await getBotSetting('omniRouteModel') || DEFAULT_OMNIROUTE_MODEL;
     const token = envToken || settingsToken || '';
     return {
-      provider: 'huggingface',
+      provider: 'omniroute',
       model: configuredModel,
-      hasToken: Boolean(token),
+      // OmniRoute works zero-config (no key) out of the box, so it is always usable.
+      hasToken: true,
       tokenSource: envToken ? 'env' : settingsToken ? 'settings' : 'none',
     };
   }
@@ -442,19 +412,30 @@ export async function callConfiguredChatCompletion(
   let baseUrl = '';
   let model = options.model || providerConfig.model;
   
-  if (providerConfig.provider === 'gemini') {
-    token = process.env.GEMINI_API_KEY || await getBotSetting('geminiApiKey') || '';
-    baseUrl = 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions';
-  } else if (providerConfig.provider === 'groq') {
+  if (providerConfig.provider === 'groq') {
     token = process.env.GROQ_API_KEY || await getBotSetting('groqApiKey') || '';
     baseUrl = 'https://api.groq.com/openai/v1/chat/completions';
   } else {
-    // huggingface
-    token = process.env.HF_TOKEN || process.env.HUGGINGFACE_API_KEY || await getBotSetting('huggingFaceToken') || '';
-    baseUrl = 'https://router.huggingface.co/v1/chat/completions';
+    // omniroute (first priority / default provider)
+    token = process.env.OMNIROUTE_KEY || await getBotSetting('omniRouteKey') || '';
+    baseUrl = process.env.OMNIROUTE_BASE_URL
+      || await getBotSetting('omniRouteBaseUrl')
+      || DEFAULT_OMNIROUTE_BASE_URL;
+    if (options.jsonMode) {
+      // Pin structured-JSON calls to a fixed model verified to honor
+      // json_object. Combo routing (auto/best-reasoning) can silently fall
+      // back to models that return broken JSON (e.g. felo-chat), so never
+      // rely on a combo here. Override via OMNIROUTE_JSON_MODEL env or the
+      // omniRouteJsonModel setting.
+      model = process.env.OMNIROUTE_JSON_MODEL
+        || await getBotSetting('omniRouteJsonModel')
+        || 'oc/nemotron-3-ultra-free';
+    } else if (!model || ['auto', 'auto/coding', 'auto/cheap', 'auto/fast'].includes(model)) {
+      model = DEFAULT_OMNIROUTE_MODEL;
+    }
   }
 
-  if (!token) {
+  if (!token && providerConfig.provider !== 'omniroute') {
     throw new Error(`${providerConfig.provider.toUpperCase()} API Key/Token is not configured. Add env variables or save the key in AI Model settings.`);
   }
 
@@ -473,6 +454,7 @@ export async function callConfiguredChatCompletion(
         messages,
         temperature: options.temperature ?? 0.2,
         max_tokens: options.maxTokens ?? 1200,
+        stream: false,
       };
 
       const isGroqQwen = providerConfig.provider === 'groq' && model.toLowerCase().includes('qwen');
@@ -483,7 +465,7 @@ export async function callConfiguredChatCompletion(
       const res = await fetch(baseUrl, {
         method: 'POST',
         headers: {
-          Authorization: `Bearer ${token}`,
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
           'Content-Type': 'application/json',
         },
         body: JSON.stringify(requestPayload),
@@ -499,6 +481,11 @@ export async function callConfiguredChatCompletion(
       const content = stripThinkingBlocks(payload?.choices?.[0]?.message?.content || '');
       if (!content) {
         throw new Error(`${providerConfig.provider} ${model} returned an empty response`);
+      }
+      if (options.jsonMode && !extractJsonObject(content)) {
+        throw new Error(
+          `${providerConfig.provider} ${model} returned no valid JSON in jsonMode (response may be broken): ${content.slice(0, 200)}`
+        );
       }
 
       markLLMSuccess();
@@ -1111,6 +1098,7 @@ export async function qualityGateBatchResult(result: BatchTelegramParseResult, m
       signals: item.signals,
       reasoning: item.reasoning,
       source: 'text',
+      modelName: item.modelName,
     }, messages[item.messageIndex] || '');
 
     results.push({
@@ -1119,6 +1107,7 @@ export async function qualityGateBatchResult(result: BatchTelegramParseResult, m
       signal: gated.signal,
       signals: gated.signals,
       reasoning: gated.reasoning,
+      modelName: gated.modelName || item.modelName || 'rule-based',
     });
   }
 
@@ -1399,11 +1388,11 @@ export async function batchParseTelegramSignals(
         const parsed = parseAIResponse<BatchTelegramParseResult>(content, { results: [] });
 
         if (parsed.results && parsed.results.length > 0) {
-          allResults.push(...parsed.results);
+          allResults.push(...parsed.results.map((r) => ({ ...r, modelName: completion.model })));
           successfulBatches++;
         } else {
           for (let j = 0; j < batch.length; j++) {
-            allResults.push({ messageIndex: i + j, isValid: false, reasoning: 'Batch parse returned no results' });
+            allResults.push({ messageIndex: i + j, isValid: false, reasoning: 'Batch parse returned no results', modelName: completion.model });
           }
         }
       } catch (err: any) {
@@ -1434,6 +1423,7 @@ export async function batchParseTelegramSignals(
             signal: ruleParsed.signal,
             signals: ruleParsed.signal ? [ruleParsed.signal] : undefined,
             reasoning: ruleParsed.reasoning + ' (rule-based fallback)',
+            modelName: 'rule-based',
           });
         }
       }
@@ -1983,105 +1973,124 @@ export async function callConfiguredVisionParser(
   prompt: string
 ): Promise<{ content: string; model: string }> {
   const groqApiKey = await getBotSetting('groqApiKey') || process.env.GROQ_API_KEY || '';
-  const geminiApiKey = await getBotSetting('geminiApiKey') || process.env.GEMINI_API_KEY || '';
-  const hfToken = await getBotSetting('huggingFaceToken') || process.env.HF_TOKEN || process.env.HUGGINGFACE_API_KEY || '';
-  const preferredProvider = await getBotSetting('aiProvider') || 'huggingface';
+  const omniRouteToken = await getBotSetting('omniRouteKey') || process.env.OMNIROUTE_KEY || '';
+  const omniRouteBaseUrl = process.env.OMNIROUTE_BASE_URL
+    || await getBotSetting('omniRouteBaseUrl')
+    || DEFAULT_OMNIROUTE_BASE_URL;
+  const preferredProvider = await getBotSetting('aiProvider') || 'omniroute';
 
-  let provider: 'groq' | 'gemini' | 'huggingface' = 'groq';
+  let provider: 'omniroute' | 'groq' = 'omniroute';
   let token = '';
   let model = '';
   let baseUrl = '';
 
-  if (preferredProvider === 'groq' && groqApiKey) {
-    provider = 'groq';
-    token = groqApiKey;
-    model = 'meta-llama/llama-4-scout-17b-16e-instruct';
-    baseUrl = 'https://api.groq.com/openai/v1/chat/completions';
-  } else if (preferredProvider === 'gemini' && geminiApiKey) {
-    provider = 'gemini';
-    token = geminiApiKey;
-    model = await getBotSetting('geminiModel') || process.env.GEMINI_MODEL || 'gemini-2.5-flash';
-    baseUrl = 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions';
+  if (preferredProvider === 'omniroute') {
+    // OmniRoute first priority (works zero-config, no key required). Use a
+    // vision-capable model (combo routing like `auto` can silently land on
+    // text-only models that reject images). Override via OMNIROUTE_VISION_MODEL.
+    provider = 'omniroute';
+    token = omniRouteToken;
+    model = process.env.OMNIROUTE_VISION_MODEL
+      || await getBotSetting('omniRouteVisionModel')
+      || 'oc/mimo-v2.5-free';
+    baseUrl = omniRouteBaseUrl;
   } else if (groqApiKey) {
     provider = 'groq';
     token = groqApiKey;
     model = 'meta-llama/llama-4-scout-17b-16e-instruct';
     baseUrl = 'https://api.groq.com/openai/v1/chat/completions';
-  } else if (geminiApiKey) {
-    provider = 'gemini';
-    token = geminiApiKey;
-    model = await getBotSetting('geminiModel') || process.env.GEMINI_MODEL || 'gemini-2.5-flash';
-    baseUrl = 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions';
-
-  } else if (hfToken) {
-    provider = 'huggingface';
-    token = hfToken;
-    model = 'Qwen/Qwen2.5-VL-72B-Instruct';
-    baseUrl = 'https://router.huggingface.co/v1/chat/completions';
   } else {
-    throw new Error('No API key configured for vision model (Groq/Gemini). Please configure in Settings.');
+    // Fall back to OmniRoute (zero-config) when Groq is preferred but not configured
+    provider = 'omniroute';
+    token = omniRouteToken;
+    model = process.env.OMNIROUTE_VISION_MODEL
+      || await getBotSetting('omniRouteVisionModel')
+      || 'oc/mimo-v2.5-free';
+    baseUrl = omniRouteBaseUrl;
   }
 
   console.log(`[AI Engine] Vision completion using ${provider}: ${model}`);
 
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 25_000);
+  const maxRetries = 2;
+  let attempt = 0;
 
-  try {
-    const res = await fetch(baseUrl, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model,
-        messages: [
-          {
-            role: 'user',
-            content: [
-              {
-                type: 'text',
-                text: prompt,
-              },
-              {
-                type: 'image_url',
-                image_url: {
-                  url: `data:${mimeType};base64,${base64Image}`,
+  while (attempt <= maxRetries) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 25_000);
+
+    try {
+      const res = await fetch(baseUrl, {
+        method: 'POST',
+        headers: {
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model,
+          messages: [
+            {
+              role: 'user',
+              content: [
+                {
+                  type: 'text',
+                  text: prompt,
                 },
-              },
-            ],
-          },
-        ],
-        temperature: 0.1,
-        max_tokens: 2000,
-      }),
-      signal: controller.signal,
-    });
+                {
+                  type: 'image_url',
+                  image_url: {
+                    url: `data:${mimeType};base64,${base64Image}`,
+                  },
+                },
+              ],
+            },
+          ],
+          temperature: 0.1,
+          max_tokens: 2000,
+          stream: false,
+        }),
+        signal: controller.signal,
+      });
 
-    const responseText = await res.text();
-    if (!res.ok) {
-      throw new Error(`${provider} ${model} vision failed (${res.status}): ${responseText.slice(0, 500)}`);
-    }
+      const responseText = await res.text();
+      if (!res.ok) {
+        throw new Error(`${provider} ${model} vision failed (${res.status}): ${responseText.slice(0, 500)}`);
+      }
 
-    const payload = JSON.parse(responseText);
-    const content = stripThinkingBlocks(payload?.choices?.[0]?.message?.content || '');
-    console.log(`[AI Engine] VLM raw response (${model}):`, content.substring(0, 300));
-    if (!content) {
-      throw new Error(`${provider} ${model} vision returned an empty response`);
-    }
+      const payload = JSON.parse(responseText);
+      const content = stripThinkingBlocks(payload?.choices?.[0]?.message?.content || '');
+      console.log(`[AI Engine] VLM raw response (${model}):`, content.substring(0, 300));
+      if (!content) {
+        throw new Error(`${provider} ${model} vision returned an empty response`);
+      }
 
-    markLLMSuccess();
-    return { content, model };
-  } catch (err) {
-    if (isRateLimitError(err)) {
-      markLLMRateLimited();
+      markLLMSuccess();
+      clearTimeout(timeout);
+      return { content, model };
+    } catch (err: any) {
+      clearTimeout(timeout);
+      const isTransient = isRateLimitError(err)
+        || err.message?.includes('429')
+        || err.message?.includes('503')
+        || err.message?.includes('500')
+        || err.message?.includes('502')
+        || err.message?.includes('timed out')
+        || err.message?.includes('aborted');
+      if (isTransient && attempt < maxRetries) {
+        attempt++;
+        const backoff = Math.pow(2, attempt) * 1000 + Math.random() * 500;
+        console.warn(`[AI Engine] Vision ${model} failed, retrying in ${Math.round(backoff)}ms...`);
+        await new Promise((r) => setTimeout(r, backoff));
+        continue;
+      }
+      if (isRateLimitError(err)) {
+        markLLMRateLimited();
+      }
+      console.error(`[AI Engine] Vision model ${model} failed permanently after ${attempt + 1} attempts:`, err instanceof Error ? err.message : err);
+      throw err;
     }
-    console.error(`[AI Engine] Vision model ${model} failed:`, err instanceof Error ? err.message : err);
-    throw err;
-  } finally {
-    clearTimeout(timeout);
   }
+
+  throw new Error('AI Engine vision retry loop failed unexpectedly');
 }
 
 
@@ -2128,7 +2137,7 @@ export async function parseImageSignal(
       ? `${VLM_SIGNAL_EXTRACT_PROMPT}\n\n=== CONTEXT FROM ACCOMPANYING TEXT/CAPTION ===\nThe user posted this image along with this text caption. Use this caption to help identify the symbol, action, entry, target, or stop loss. If the image itself lacks text but is a chart of the symbol mentioned in the caption, use the caption details:\n"${caption}"`
       : VLM_SIGNAL_EXTRACT_PROMPT;
 
-    // 1. Try configured vision parser (Groq / Gemini)
+    // 1. Try configured vision parser (OmniRoute / Groq)
     try {
       const { content, model } = await callConfiguredVisionParser(base64Image, mimeType, visionPrompt);
       const parsed = normalizeImageParseResult(parseAIResponse<Partial<VLMImageParseResult>>(content, EMPTY_IMAGE_PARSE_RESULT));
@@ -2579,6 +2588,80 @@ export async function searchMarketNews(
   return [];
 }
 
+export async function searchNewsViaOmniRoute(
+  query: string,
+  maxResults: number = 8
+): Promise<SearchFunctionResultItem[]> {
+  const SEARCH_TIMEOUT_MS = 10_000;
+  try {
+    const baseUrl = process.env.OMNIROUTE_BASE_URL
+      || await getBotSetting('omniRouteBaseUrl')
+      || DEFAULT_OMNIROUTE_BASE_URL;
+    const searchUrl = baseUrl.replace(/\/chat\/completions$/, '/search');
+    const token = process.env.OMNIROUTE_KEY || await getBotSetting('omniRouteKey') || '';
+
+    console.log(`[AI Engine] OmniRoute search: "${query.slice(0, 45)}" → ${searchUrl}`);
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), SEARCH_TIMEOUT_MS);
+    try {
+      const res = await fetch(searchUrl, {
+        method: 'POST',
+        headers: {
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          query,
+          max_results: maxResults,
+          search_type: 'web',
+        }),
+        signal: controller.signal,
+      });
+      const responseText = await res.text();
+      if (!res.ok) {
+        console.error(`[AI Engine] OmniRoute search failed (${res.status}): ${responseText.slice(0, 300)}`);
+        return [];
+      }
+      const data = JSON.parse(responseText);
+      if (data?.errors?.length) {
+        console.error('[AI Engine] OmniRoute search provider errors:', data.errors);
+      }
+      const results: Array<{
+        title?: string;
+        url?: string;
+        display_url?: string | null;
+        snippet?: string | null;
+        position?: number;
+        published_at?: string | null;
+        favicon_url?: string | null;
+      }> = data?.results || [];
+      const items: SearchFunctionResultItem[] = results
+        .filter((r) => r.title && r.url)
+        .map((r, index) => {
+          let host = '';
+          try { host = new URL(r.url!).hostname.replace(/^www\./, ''); } catch { host = ''; }
+          return {
+            url: r.url!,
+            name: r.title!,
+            snippet: r.snippet || r.title!,
+            host_name: host || r.display_url || 'unknown',
+            rank: r.position || index + 1,
+            date: r.published_at || new Date().toISOString(),
+            favicon: r.favicon_url || (host ? `https://${host}/favicon.ico` : ''),
+          };
+        });
+      console.log(`[AI Engine] OmniRoute search returned ${items.length} results for "${query.slice(0, 45)}"`);
+      return items;
+    } finally {
+      clearTimeout(timeoutId);
+    }
+  } catch (err: any) {
+    console.error(`[AI Engine] OmniRoute search failed for "${query.slice(0, 45)}":`, err?.message?.substring(0, 200));
+    return [];
+  }
+}
+
 // Track search success to reset rate limit state
 let lastSearchSuccessAt = 0;
 function markSearchSuccess() {
@@ -2713,26 +2796,28 @@ export async function analyzeNewsSentiment(
 
 // ─── Utility ────────────────────────────────────────────────────────────────
 
-function parseAIResponse<T>(content: string, fallback: T): T {
+function extractJsonObject(content: string): unknown {
   try {
     let jsonStr = content.trim();
-
-    // Remove markdown code block wrappers if present
     const codeBlockMatch = jsonStr.match(/```(?:json)?\s*([\s\S]*?)```/);
     if (codeBlockMatch) {
       jsonStr = codeBlockMatch[1].trim();
     }
-
-    // Try to find JSON object in the response
     const jsonMatch = jsonStr.match(/\{[\s\S]*\}/);
     if (jsonMatch) {
       jsonStr = jsonMatch[0];
     }
-
-    const parsed = JSON.parse(jsonStr);
-    return parsed as T;
+    return JSON.parse(jsonStr);
   } catch {
+    return null;
+  }
+}
+
+function parseAIResponse<T>(content: string, fallback: T): T {
+  const parsed = extractJsonObject(content);
+  if (parsed === null) {
     console.error('Failed to parse AI response:', content?.substring(0, 200));
     return fallback;
   }
+  return parsed as T;
 }

@@ -47,27 +47,16 @@ import { toast } from 'sonner'
 
 // ─── Telegram Channels Card ────────────────────────────────
 
-type HFModelOption = {
-  id: string
-  name: string
-  description: string
-}
-
-const DEFAULT_HF_MODELS: HFModelOption[] = [
-  { id: 'deepseek-ai/DeepSeek-R1-Distill-Qwen-32B', name: 'DeepSeek-R1 Distill Qwen 32B', description: 'State-of-the-art reasoning model. Best for extracting signals.' },
-  { id: 'meta-llama/Llama-3.3-70B-Instruct', name: 'Llama 3.3 70B Instruct', description: 'Extremely powerful 70B model.' },
-  { id: 'Qwen/Qwen2.5-72B-Instruct', name: 'Qwen 2.5 72B Instruct', description: 'Highly capable 72B reasoning model.' },
-  { id: 'Qwen/Qwen2.5-Coder-32B-Instruct', name: 'Qwen 2.5 Coder 32B', description: 'Accurate model optimized for logical parsing.' },
-]
-
 function AIProviderCard() {
-  const [provider, setProvider] = useState<'huggingface' | 'gemini' | 'groq'>('huggingface')
+  const [provider, setProvider] = useState<'omniroute' | 'groq'>('omniroute')
   const [model, setModel] = useState('')
   const [token, setToken] = useState('')
+  const [baseUrl, setBaseUrl] = useState('')
   
   // Cache of configuration for each provider
   const [providerConfigs, setProviderConfigs] = useState<Record<string, {
     model: string
+    baseUrl?: string
     hasToken: boolean
     tokenSource: 'env' | 'settings' | 'none'
     tokenPreview: string | null
@@ -77,6 +66,7 @@ function AIProviderCard() {
   const [loading, setLoading] = useState(false)
   const [testing, setTesting] = useState(false)
   const [activeProvider, setActiveProvider] = useState<string>('')
+  const [jsonModel, setJsonModel] = useState('oc/nemotron-3-ultra-free')
 
   const loadProvider = useCallback(async () => {
     setLoading(true)
@@ -88,12 +78,14 @@ function AIProviderCard() {
         setActiveProvider(data.activeProvider)
         
         // Default to active provider
-        const currentProvider = data.activeProvider || 'huggingface'
+        const currentProvider = data.activeProvider || 'omniroute'
         setProvider(currentProvider)
-        
+
         const config = data.providers[currentProvider]
         if (config) {
           setModel(config.model)
+          if (config.baseUrl) setBaseUrl(config.baseUrl)
+          if (config.jsonModel) setJsonModel(config.jsonModel)
         }
       }
     } catch (err: any) {
@@ -107,12 +99,13 @@ function AIProviderCard() {
     loadProvider()
   }, [loadProvider])
 
-  const handleProviderChange = (newProvider: 'huggingface' | 'gemini' | 'groq') => {
+  const handleProviderChange = (newProvider: 'omniroute' | 'groq') => {
     setProvider(newProvider)
     setToken('')
     const config = providerConfigs[newProvider]
     if (config) {
       setModel(config.model)
+      if (config.baseUrl) setBaseUrl(config.baseUrl)
     }
   }
 
@@ -126,6 +119,8 @@ function AIProviderCard() {
           provider,
           model,
           token: token.trim(),
+          baseUrl: baseUrl.trim(),
+          jsonModel: jsonModel.trim(),
         }),
       })
       const data = await res.json()
@@ -198,8 +193,7 @@ function AIProviderCard() {
               <SelectValue placeholder="Select provider" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="huggingface" className="text-xs">Hugging Face Router (Hub models)</SelectItem>
-              <SelectItem value="gemini" className="text-xs">Google Gemini (Free Tier)</SelectItem>
+              <SelectItem value="omniroute" className="text-xs">OmniRoute Gateway (Default)</SelectItem>
               <SelectItem value="groq" className="text-xs">Groq Cloud (Fast Free Tier)</SelectItem>
             </SelectContent>
           </Select>
@@ -214,7 +208,7 @@ function AIProviderCard() {
             <span className="text-muted-foreground">Token Status</span>
             <span className="font-medium text-foreground">
               {tokenSource === 'env' 
-                ? `Loaded from env (${provider === 'huggingface' ? 'HF_TOKEN' : provider === 'gemini' ? 'GEMINI_API_KEY' : 'GROQ_API_KEY'})` 
+                ? `Loaded from env (${provider === 'omniroute' ? 'OMNIROUTE_KEY' : 'GROQ_API_KEY'})` 
                 : tokenPreview || 'Not configured'}
             </span>
           </div>
@@ -223,11 +217,11 @@ function AIProviderCard() {
         <div>
           <Label className="text-xs flex items-center gap-1.5">
             <Key className="h-3 w-3 shrink-0" /> 
-            {provider === 'huggingface' ? 'Hugging Face Token' : provider === 'gemini' ? 'Gemini API Key' : 'Groq API Key'}
+            {provider === 'omniroute' ? 'OmniRoute API Key' : 'Groq API Key'}
           </Label>
           <Input
             type="password"
-            placeholder={hasToken ? 'Leave blank to keep existing key/token' : provider === 'huggingface' ? 'hf_...' : 'AIzaSy... or gsk_...'}
+            placeholder={hasToken ? 'Leave blank to keep existing key/token' : provider === 'omniroute' ? 'Leave blank for zero-config (no key needed)' : 'gsk_...'}
             value={token}
             onChange={e => setToken(e.target.value)}
             className="h-8 text-xs mt-1 bg-muted/10 focus-visible:bg-transparent"
@@ -236,13 +230,34 @@ function AIProviderCard() {
           {tokenSource === 'env' && (
             <p className="text-[10px] text-muted-foreground mt-1">Token is coming from server environment variable.</p>
           )}
-          {!hasToken && tokenSource !== 'env' && (
+          {provider === 'omniroute' && (
+            <p className="text-[10px] text-muted-foreground mt-1">OmniRoute works with zero config — leave the key blank to use free providers out of the box.</p>
+          )}
+          {!hasToken && tokenSource !== 'env' && provider !== 'omniroute' && (
             <p className="text-[10px] text-amber-500 mt-1 flex items-center gap-1">
               <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
               API Key is required to run {provider} models.
             </p>
           )}
         </div>
+
+        {provider === 'omniroute' && (
+          <div>
+            <Label className="text-xs flex items-center gap-1.5">
+              <Link2 className="h-3 w-3 shrink-0" /> OmniRoute Base URL
+            </Label>
+            <Input
+              type="text"
+              placeholder="http://localhost:20128/v1/chat/completions"
+              value={baseUrl}
+              onChange={e => setBaseUrl(e.target.value)}
+              className="h-8 text-xs mt-1 bg-muted/10 focus-visible:bg-transparent font-mono"
+            />
+            <p className="text-[10px] text-muted-foreground mt-1">
+              Where OmniRoute runs. Use this to point at a deployed gateway instead of localhost.
+            </p>
+          </div>
+        )}
 
         <div className="space-y-1.5">
           <Label className="text-xs">Select Model</Label>
@@ -266,6 +281,40 @@ function AIProviderCard() {
               </button>
             ))}
           </div>
+          {provider === 'omniroute' && (
+            <div className="mt-2">
+              <Label className="text-xs flex items-center gap-1.5">
+                <Link2 className="h-3 w-3 shrink-0" /> Custom Model Alias
+              </Label>
+              <Input
+                type="text"
+                placeholder="e.g. auto, auto/coding, claude/sonnet-4-5, gemini/2.5-flash"
+                value={model}
+                onChange={e => setModel(e.target.value)}
+                className="h-8 text-xs mt-1 bg-muted/10 focus-visible:bg-transparent font-mono"
+              />
+              <p className="text-[10px] text-muted-foreground mt-1">
+                Any OmniRoute model/alias works — use one of the presets above or type your own.
+              </p>
+            </div>
+          )}
+          {provider === 'omniroute' && (
+            <div className="mt-2">
+              <Label className="text-xs flex items-center gap-1.5">
+                <Link2 className="h-3 w-3 shrink-0" /> JSON Parsing Model
+              </Label>
+              <Input
+                type="text"
+                placeholder="oc/nemotron-3-ultra-free"
+                value={jsonModel}
+                onChange={e => setJsonModel(e.target.value)}
+                className="h-8 text-xs mt-1 bg-muted/10 focus-visible:bg-transparent font-mono"
+              />
+              <p className="text-[10px] text-muted-foreground mt-1">
+                Fixed model for structured JSON parsing (signals, analysis). Avoids combos that can return broken JSON.
+              </p>
+            </div>
+          )}
         </div>
 
         <div className="grid grid-cols-2 gap-2">

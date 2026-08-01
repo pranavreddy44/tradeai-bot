@@ -106,7 +106,7 @@ export async function POST(request: NextRequest) {
         }
 
         // Step 6: Save AI decision
-        const method = usedFallback ? 'rule-based' : (analysis.modelName || 'huggingface-qwen3');
+        const method = usedFallback ? 'rule-based' : (analysis.modelName || 'omniroute-auto');
         const aiDecision = await db.aIDecision.create({
           data: {
             model: method,

@@ -17,6 +17,7 @@ import { getSourceConfidenceMultiplier } from '@/lib/signals/source-performance'
 
 const TELEGRAM_SERVICE_URL = 'http://localhost:3002';
 const TELEGRAM_AI_SELECTION_PERCENT = 0.6;
+export const maxDuration = 60;
 const TELEGRAM_AI_MAX_MESSAGES = 60;
 
 type ScoredTelegramMessage = {
@@ -49,6 +50,7 @@ type TelegramScanParseResult = {
     confidence: number;
   }>;
   reasoning?: string;
+  modelName?: string;
 };
 
 function scoreTelegramMessage(text: string, messageAt?: string | null): { score: number; reasons: string[] } {
@@ -118,7 +120,183 @@ async function recoverTrustedTelegramResult(
     signal: recovered.signal,
     signals: [recovered.signal],
     reasoning: `${recovered.reasoning} ${resolvedInstrument ? `Resolved via instrument list (${resolvedInstrument.matchType}: ${resolvedInstrument.name}).` : ''} Recovered from AI rejection: ${result.reasoning || 'not provided'}`,
+    modelName: 'rule-based',
   };
+}
+
+// Run async tasks with bounded concurrency (keeps image/VLM calls from hammering the AI gateway).
+async function runConcurrent<T>(tasks: Array<() => Promise<T>>, concurrency: number): Promise<T[]> {
+  const results: T[] = new Array(tasks.length);
+  let next = 0;
+  async function worker() {
+    while (true) {
+      const i = next++;
+      if (i >= tasks.length) return;
+      try {
+        results[i] = await tasks[i]();
+      } catch (err) {
+        console.error('[TelegramAPI] concurrent task error:', err);
+      }
+    }
+  }
+  const workers = Array.from({ length: Math.min(concurrency, tasks.length) }, () => worker());
+  await Promise.all(workers);
+  return results;
+}
+
+// Parse a channel's latest image into trade signal(s). Runs VLM + technical-indicator
+// validation + live-price normalization, then creates/updates TradeSignal rows.
+async function processChannelImage(channel: any, imageData: any): Promise<any[]> {
+  const createdSignals: any[] = [];
+  try {
+    const { parseImageSignal, deriveTrustedChartSignal, deriveTrustedMentionSignal } = await import('@/lib/ai-engine');
+    const { normalizeSignalWithLivePrice } = await import('@/lib/broker/live-prices');
+    const { validateChartSignalWithIndicators } = await import('@/lib/chart/technical-analysis');
+
+    const captionTextOnly = [imageData.caption, imageData.message, imageData.text].filter(Boolean).join(' ');
+    const imageResult = await parseImageSignal(imageData.base64Image, imageData.mimeType || 'image/png', captionTextOnly);
+    const captionText = [imageData.caption, imageData.message, imageData.text, imageResult.extractedText].filter(Boolean).join(' ');
+
+    const fallbackSignal = !imageResult.signals?.length
+      ? deriveTrustedChartSignal(imageResult) || await deriveTrustedMentionSignal(captionText)
+      : null;
+
+    const signalsToCreate = imageResult.signals?.length ? imageResult.signals : fallbackSignal ? [fallbackSignal] : [];
+
+    if (signalsToCreate.length > 0) {
+      await db.aIDecision.create({
+        data: {
+          model: imageResult.imageType === 'chart' ? 'zai-vlm+technicalindicators' : 'zai-vlm',
+          inputType: imageResult.imageType === 'chart' ? 'telegram-chart-image' : 'telegram-image',
+          inputData: `[Image from ${channel.name || channel.channelId}] ${imageResult.extractedText?.substring(0, 2000) || '(no extracted text)'}`,
+          output: JSON.stringify({ ...imageResult, trustedFallbackSignal: fallbackSignal }),
+          symbol: signalsToCreate[0]?.symbol || imageResult.chartAnalysis?.symbol || null,
+          action: signalsToCreate[0]?.action || null,
+          confidence: signalsToCreate[0]?.confidence ?? null,
+        },
+      });
+
+      for (const rawSig of signalsToCreate) {
+        try {
+          const chartReason = imageResult.chartAnalysis
+            ? [
+                imageResult.chartAnalysis.setup ? `Setup: ${imageResult.chartAnalysis.setup}` : '',
+                imageResult.chartAnalysis.trend ? `Trend: ${imageResult.chartAnalysis.trend}` : '',
+                imageResult.chartAnalysis.timeframe ? `Timeframe: ${imageResult.chartAnalysis.timeframe}` : '',
+                imageResult.chartAnalysis.resistanceLevels?.length ? `Resistance: ${imageResult.chartAnalysis.resistanceLevels.join(', ')}` : '',
+                imageResult.chartAnalysis.supportLevels?.length ? `Support: ${imageResult.chartAnalysis.supportLevels.join(', ')}` : '',
+                imageResult.chartAnalysis.chartNotes || '',
+                imageResult.chartAnalysis.riskNotes || '',
+              ].filter(Boolean).join(' | ')
+            : '';
+
+          const liveNormalizedSig = await normalizeSignalWithLivePrice({
+            ...rawSig,
+            reasoning: `[${imageResult.imageType === 'chart' ? 'Chart Image Signal' : 'Image Signal'}${rawSig.notes ? ` — ${rawSig.notes}` : ''}] ${captionTextOnly ? captionTextOnly + ' | ' : ''}${chartReason || imageResult.extractedText?.substring(0, 500) || ''}`,
+          });
+
+          const sig = imageResult.imageType === 'chart'
+            ? await validateChartSignalWithIndicators(liveNormalizedSig, imageResult.chartAnalysis)
+            : liveNormalizedSig;
+
+          const tradeType = inferTradeType({
+            symbol: sig.symbol,
+            source: imageResult.imageType === 'chart' ? 'telegram-chart-image' : 'telegram-image',
+            text: sig.reasoning,
+          });
+          const sourceTimestamp = parseSourceTimestamp(imageData.date);
+
+          const quality = evaluateTradeQuality({
+            symbol: sig.symbol,
+            action: sig.action,
+            confidence: sig.confidence,
+            entryPrice: sig.entryPrice,
+            targetPrice: sig.targetPrice,
+            stopLoss: sig.stopLoss,
+            tradeType,
+            source: imageResult.imageType === 'chart' ? 'telegram-chart-image' : 'telegram-image',
+            sourceTimestamp,
+            text: sig.reasoning,
+            trustedSource: true,
+          });
+
+          let warningText = '';
+          if (!quality.accepted) {
+            const isCriticalError = quality.reasons.includes('missingValidEntryTargetStop') || quality.reasons.includes('invalidDirectionalLevels');
+            if (isCriticalError) {
+              console.log(`[TelegramAPI] Critical invalid levels for image signal ${sig.symbol}: ${formatTradeQualityReason(quality)}`);
+              continue;
+            }
+            warningText = `[Quality Warning: ${quality.reasons.join(', ')}] `;
+            console.log(`[TelegramAPI] Trusted source bypassed quality check for image signal ${sig.symbol}: ${formatTradeQualityReason(quality)}`);
+          }
+
+          const existing = await db.tradeSignal.findFirst({
+            where: {
+              symbol: sig.symbol.toUpperCase(),
+              action: sig.action,
+              status: 'pending',
+              createdAt: {
+                gte: new Date(Date.now() - 24 * 60 * 60 * 1000),
+              },
+            },
+          });
+
+          if (existing) {
+            const sourceMultiplier = await getSourceConfidenceMultiplier(
+              imageResult.imageType === 'chart' ? 'telegram-chart-image' : 'telegram-image',
+              channel.channelId
+            );
+            const finalConfidence = Math.min(95, Math.round(quality.score * sourceMultiplier));
+            await db.tradeSignal.update({
+              where: { id: existing.id },
+              data: {
+                confidence: Math.max(existing.confidence, finalConfidence),
+                entryPrice: sig.entryPrice,
+                targetPrice: sig.targetPrice ?? existing.targetPrice,
+                stopLoss: sig.stopLoss ?? existing.stopLoss,
+                reasoning: `${warningText}${sig.reasoning} | ${formatTradeQualityReason(quality)}`,
+                source: imageResult.imageType === 'chart' ? 'telegram-chart-image' : 'telegram-image',
+                tradeType: existing.tradeType ?? tradeType,
+                updatedAt: new Date(),
+              },
+            });
+          } else {
+            const sourceMultiplier = await getSourceConfidenceMultiplier(
+              imageResult.imageType === 'chart' ? 'telegram-chart-image' : 'telegram-image',
+              channel.channelId
+            );
+            const finalConfidence = Math.min(95, Math.round(quality.score * sourceMultiplier));
+            const created = await db.tradeSignal.create({
+              data: {
+                symbol: sig.symbol.toUpperCase(),
+                exchange: 'NSE',
+                action: sig.action,
+                source: imageResult.imageType === 'chart' ? 'telegram-chart-image' : 'telegram-image',
+                confidence: finalConfidence,
+                entryPrice: sig.entryPrice,
+                targetPrice: sig.targetPrice,
+                stopLoss: sig.stopLoss,
+                quantity: 1,
+                reasoning: `${warningText}${sig.reasoning} | ${formatTradeQualityReason(quality)}`,
+                status: 'pending',
+                channelId: channel.channelId,
+                modelName: imageResult.imageType === 'chart' ? 'vlm+technicalindicators' : 'vlm',
+                tradeType,
+                sourceTimestamp,
+              },
+            });
+            createdSignals.push(created);
+          }
+        } catch (sigErr) {
+          console.error(`[TelegramAPI] Image signal creation error for ${rawSig.symbol}:`, sigErr);
+        }
+      }
+    }
+  } catch (imgErr) {
+    console.error(`[TelegramAPI] Channel ${channel.channelId} image parsing error:`, imgErr);
+  }
+  return createdSignals;
 }
 
 // GET /api/telegram?action=channels
@@ -272,6 +450,7 @@ export async function POST(request: NextRequest) {
 
         // Collect ALL messages from ALL channels first (no AI calls yet)
         const signals: any[] = [];
+        const imageTasks: Array<() => Promise<any[]>> = [];
         const allMessages: ScoredTelegramMessage[] = [];
         const channelReports: Array<{
           channelId: string;
@@ -410,159 +589,18 @@ export async function POST(request: NextRequest) {
             scannedCount++;
           }
 
-          // Process image data if found
+          // Process image data if found (parallelized across channels below)
           if (imageData && imageData.found && imageData.base64Image) {
-            try {
-              const { parseImageSignal, deriveTrustedChartSignal, deriveTrustedMentionSignal } = await import('@/lib/ai-engine');
-              const { normalizeSignalWithLivePrice } = await import('@/lib/broker/live-prices');
-              const { validateChartSignalWithIndicators } = await import('@/lib/chart/technical-analysis');
-
-              const captionTextOnly = [imageData.caption, imageData.message, imageData.text].filter(Boolean).join(' ');
-              const imageResult = await parseImageSignal(imageData.base64Image, imageData.mimeType || 'image/png', captionTextOnly);
-              const captionText = [imageData.caption, imageData.message, imageData.text, imageResult.extractedText].filter(Boolean).join(' ');
-              
-              const fallbackSignal = !imageResult.signals?.length
-                ? deriveTrustedChartSignal(imageResult) || await deriveTrustedMentionSignal(captionText)
-                : null;
-              
-              const signalsToCreate = imageResult.signals?.length ? imageResult.signals : fallbackSignal ? [fallbackSignal] : [];
-              
-              if (signalsToCreate.length > 0) {
-                await db.aIDecision.create({
-                  data: {
-                    model: imageResult.imageType === 'chart' ? 'zai-vlm+technicalindicators' : 'zai-vlm',
-                    inputType: imageResult.imageType === 'chart' ? 'telegram-chart-image' : 'telegram-image',
-                    inputData: `[Image from ${channel.name || channel.channelId}] ${imageResult.extractedText?.substring(0, 2000) || '(no extracted text)'}`,
-                    output: JSON.stringify({ ...imageResult, trustedFallbackSignal: fallbackSignal }),
-                    symbol: signalsToCreate[0]?.symbol || imageResult.chartAnalysis?.symbol || null,
-                    action: signalsToCreate[0]?.action || null,
-                    confidence: signalsToCreate[0]?.confidence ?? null,
-                  },
-                });
-
-                for (const rawSig of signalsToCreate) {
-                  try {
-                    const chartReason = imageResult.chartAnalysis
-                      ? [
-                          imageResult.chartAnalysis.setup ? `Setup: ${imageResult.chartAnalysis.setup}` : '',
-                          imageResult.chartAnalysis.trend ? `Trend: ${imageResult.chartAnalysis.trend}` : '',
-                          imageResult.chartAnalysis.timeframe ? `Timeframe: ${imageResult.chartAnalysis.timeframe}` : '',
-                          imageResult.chartAnalysis.resistanceLevels?.length ? `Resistance: ${imageResult.chartAnalysis.resistanceLevels.join(', ')}` : '',
-                          imageResult.chartAnalysis.supportLevels?.length ? `Support: ${imageResult.chartAnalysis.supportLevels.join(', ')}` : '',
-                          imageResult.chartAnalysis.chartNotes || '',
-                          imageResult.chartAnalysis.riskNotes || '',
-                        ].filter(Boolean).join(' | ')
-                      : '';
-
-                    const liveNormalizedSig = await normalizeSignalWithLivePrice({
-                      ...rawSig,
-                      reasoning: `[${imageResult.imageType === 'chart' ? 'Chart Image Signal' : 'Image Signal'}${rawSig.notes ? ` — ${rawSig.notes}` : ''}] ${captionTextOnly ? captionTextOnly + ' | ' : ''}${chartReason || imageResult.extractedText?.substring(0, 500) || ''}`,
-                    });
-
-                    const sig = imageResult.imageType === 'chart'
-                      ? await validateChartSignalWithIndicators(liveNormalizedSig, imageResult.chartAnalysis)
-                      : liveNormalizedSig;
-
-                    const tradeType = inferTradeType({
-                      symbol: sig.symbol,
-                      source: imageResult.imageType === 'chart' ? 'telegram-chart-image' : 'telegram-image',
-                      text: sig.reasoning,
-                    });
-                    const sourceTimestamp = parseSourceTimestamp(imageData.date);
-
-                    const quality = evaluateTradeQuality({
-                      symbol: sig.symbol,
-                      action: sig.action,
-                      confidence: sig.confidence,
-                      entryPrice: sig.entryPrice,
-                      targetPrice: sig.targetPrice,
-                      stopLoss: sig.stopLoss,
-                      tradeType,
-                      source: imageResult.imageType === 'chart' ? 'telegram-chart-image' : 'telegram-image',
-                      sourceTimestamp,
-                      text: sig.reasoning,
-                      trustedSource: true,
-                    });
-
-                    let warningText = '';
-                    if (!quality.accepted) {
-                      const isCriticalError = quality.reasons.includes('missingValidEntryTargetStop') || quality.reasons.includes('invalidDirectionalLevels');
-                      if (isCriticalError) {
-                        console.log(`[TelegramAPI] Critical invalid levels for image signal ${sig.symbol}: ${formatTradeQualityReason(quality)}`);
-                        continue;
-                      }
-                      warningText = `[Quality Warning: ${quality.reasons.join(', ')}] `;
-                      console.log(`[TelegramAPI] Trusted source bypassed quality check for image signal ${sig.symbol}: ${formatTradeQualityReason(quality)}`);
-                    }
-
-                    // Check for duplicates
-                    const existing = await db.tradeSignal.findFirst({
-                      where: {
-                        symbol: sig.symbol.toUpperCase(),
-                        action: sig.action,
-                        status: 'pending',
-                        createdAt: {
-                          gte: new Date(Date.now() - 24 * 60 * 60 * 1000),
-                        },
-                      },
-                    });
-
-                    if (existing) {
-                      const sourceMultiplier = await getSourceConfidenceMultiplier(
-                        imageResult.imageType === 'chart' ? 'telegram-chart-image' : 'telegram-image',
-                        channel.channelId
-                      );
-                      const finalConfidence = Math.min(95, Math.round(quality.score * sourceMultiplier));
-                      await db.tradeSignal.update({
-                        where: { id: existing.id },
-                        data: {
-                          confidence: Math.max(existing.confidence, finalConfidence),
-                          entryPrice: sig.entryPrice,
-                          targetPrice: sig.targetPrice ?? existing.targetPrice,
-                          stopLoss: sig.stopLoss ?? existing.stopLoss,
-                          reasoning: `${warningText}${sig.reasoning} | ${formatTradeQualityReason(quality)}`,
-                          source: imageResult.imageType === 'chart' ? 'telegram-chart-image' : 'telegram-image',
-                          updatedAt: new Date(),
-                        },
-                      });
-                    } else {
-                      const sourceMultiplier = await getSourceConfidenceMultiplier(
-                        imageResult.imageType === 'chart' ? 'telegram-chart-image' : 'telegram-image',
-                        channel.channelId
-                      );
-                      const finalConfidence = Math.min(95, Math.round(quality.score * sourceMultiplier));
-                      const created = await db.tradeSignal.create({
-                        data: {
-                          symbol: sig.symbol.toUpperCase(),
-                          exchange: 'NSE',
-                          action: sig.action,
-                          source: imageResult.imageType === 'chart' ? 'telegram-chart-image' : 'telegram-image',
-                          confidence: finalConfidence,
-                          entryPrice: sig.entryPrice,
-                          targetPrice: sig.targetPrice,
-                          stopLoss: sig.stopLoss,
-                          quantity: 1,
-                          reasoning: `${warningText}${sig.reasoning} | ${formatTradeQualityReason(quality)}`,
-                          status: 'pending',
-                          channelId: channel.channelId,
-                          modelName: imageResult.imageType === 'chart' ? 'vlm+technicalindicators' : 'vlm',
-                          tradeType,
-                          sourceTimestamp,
-                        },
-                      });
-                      signals.push(created);
-                    }
-                  } catch (sigErr) {
-                    console.error(`[TelegramAPI] Image signal creation error for ${rawSig.symbol}:`, sigErr);
-                  }
-                }
-              }
-            } catch (imgErr) {
-              console.error(`[TelegramAPI] Channel ${channel.channelId} image parsing error:`, imgErr);
-            }
+            imageTasks.push(() => processChannelImage(channel, imageData));
           } else if (imageError) {
             console.error(`[TelegramAPI] Channel ${channel.channelId} image fetch error:`, imageError);
           }
+        }
+
+        // Parse channel images in parallel (bounded concurrency to respect AI-gateway rate limits)
+        const imageSignalBatches = await runConcurrent(imageTasks, 3);
+        for (const batch of imageSignalBatches) {
+          signals.push(...batch);
         }
 
         if (allMessages.length === 0) {
@@ -710,7 +748,7 @@ export async function POST(request: NextRequest) {
                   if (existing) {
                     const sourceMultiplier = await getSourceConfidenceMultiplier('telegram', msgInfo.channelId);
                     const weightedConfidence = Math.min(95, Math.round(finalConfidence * sourceMultiplier));
-                    const activeModel = result.modelName || (result.reasoning?.includes('rule') ? 'rule-based' : 'huggingface-qwen3');
+                    const activeModel = result.modelName || (result.reasoning?.includes('rule') ? 'rule-based' : 'omniroute-auto');
                     // Update existing signal with latest data instead of creating duplicate
                     const updated = await db.tradeSignal.update({
                       where: { id: existing.id },
@@ -736,7 +774,7 @@ export async function POST(request: NextRequest) {
 
                   const sourceMultiplier = await getSourceConfidenceMultiplier('telegram', msgInfo.channelId);
                   const weightedConfidence = Math.min(95, Math.round(finalConfidence * sourceMultiplier));
-                  const activeModel = result.modelName || (result.reasoning?.includes('rule') ? 'rule-based' : 'huggingface-qwen3');
+                  const activeModel = result.modelName || (result.reasoning?.includes('rule') ? 'rule-based' : 'omniroute-auto');
                   const signal = await db.tradeSignal.create({
                     data: {
                       symbol: sig.symbol.toUpperCase(),
@@ -769,7 +807,7 @@ export async function POST(request: NextRequest) {
 
             // Save AI decision for each message
             try {
-              const activeModel = result.modelName || (result.reasoning?.includes('rule') ? 'rule-based' : 'huggingface-qwen3');
+              const activeModel = result.modelName || (result.reasoning?.includes('rule') ? 'rule-based' : 'omniroute-auto');
               await db.aIDecision.create({
                 data: {
                   model: activeModel,

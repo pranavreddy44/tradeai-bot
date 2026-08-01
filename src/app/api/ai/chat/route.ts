@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import {
   callConfiguredChatCompletion,
-  DEFAULT_HUGGINGFACE_MODEL,
   getConfiguredAIProvider,
-  HUGGINGFACE_TEXT_MODELS,
+  OMNIROUTE_TEXT_MODELS,
+  GROQ_TEXT_MODELS,
 } from '@/lib/ai-engine';
 
 const SYSTEM_PROMPT = `You are TradeAI Bot, an expert trading assistant for Indian stock markets (NSE/BSE). You provide market analysis, trading strategies, risk management advice, and help with technical/fundamental analysis. Always include relevant stock symbols and prices when discussing Indian stocks. Be concise and actionable. Use Indian Rupee (₹) for prices.
@@ -23,7 +23,10 @@ interface ChatMessage {
   content: string;
 }
 
-const MODEL_DISPLAY_NAMES = new Map<string, string>(HUGGINGFACE_TEXT_MODELS.map(model => [model.id, model.name]));
+const MODEL_DISPLAY_NAMES = new Map<string, string>([
+  ...OMNIROUTE_TEXT_MODELS.map(model => [model.id, model.name] as [string, string]),
+  ...GROQ_TEXT_MODELS.map(model => [model.id, model.name] as [string, string]),
+]);
 
 // POST /api/ai/chat - AI Chat Assistant endpoint
 export async function POST(request: NextRequest) {

@@ -25,7 +25,7 @@ interface TradingStore {
 }
 
 const defaultSettings: Settings = {
-  aiModel: 'Qwen/Qwen3-32B',
+  aiModel: 'auto',
   newsAnalysisEnabled: true,
   telegramSignalEnabled: true,
   aiWeight: 70,

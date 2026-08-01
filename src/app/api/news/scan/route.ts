@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import {
   searchMarketNews,
+  searchNewsViaOmniRoute,
   analyzeNewsSentiment,
   searchNewsViaPageReader,
   searchNewsViaRSS,
@@ -480,6 +481,8 @@ async function getExistingUnanalyzedNews() {
 
 // ─── POST /api/news/scan ────────────────────────────────────────────────────
 
+export const maxDuration = 60;
+
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json().catch(() => ({}));
@@ -492,13 +495,14 @@ export async function POST(request: NextRequest) {
       .then((items): SourceBatch => ({ source: 'rss', items }))
       .catch((err): SourceBatch => ({ source: 'rss', items: [], error: String(err) }));
 
+    // OmniRoute /v1/search is the default web search source.
     const webPromises: Promise<SourceBatch>[] = [];
     for (let i = 0; i < queries.length; i += 2) {
       const chunk = queries.slice(i, i + 2);
       const chunkPromises = chunk.map((query) =>
-        withTimeout(searchMarketNews(query, 0), 8_000, [] as SearchFunctionResultItem[], `web search: ${query.slice(0, 45)}`)
-          .then((items): SourceBatch => ({ source: query, items }))
-          .catch((err): SourceBatch => ({ source: query, items: [], error: String(err) }))
+        withTimeout(searchNewsViaOmniRoute(query, 8), 10_000, [] as SearchFunctionResultItem[], `omniroute search: ${query.slice(0, 45)}`)
+          .then((items): SourceBatch => ({ source: `omniroute:${query}`, items }))
+          .catch((err): SourceBatch => ({ source: `omniroute:${query}`, items: [], error: String(err) }))
       );
       webPromises.push(...chunkPromises);
       if (i + 2 < queries.length) {
@@ -506,7 +510,36 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const batches = await Promise.all([rssPromise, ...webPromises]);
+    const webBatches = await Promise.all(webPromises);
+    for (const batch of webBatches) {
+      queryResults[batch.source] = batch.items.length;
+      if (batch.error) queryResults[`${batch.source}_error`] = 1;
+    }
+
+    // Fallback: if OmniRoute returned nothing for a query, use the ZAI SDK web search.
+    const fallbackWebPromises: Promise<SourceBatch>[] = [];
+    const emptyQueries = queries.filter(
+      (query) => !webBatches.some((b) => b.source === `omniroute:${query}` && b.items.length > 0)
+    );
+    for (let i = 0; i < emptyQueries.length; i += 2) {
+      const chunk = emptyQueries.slice(i, i + 2);
+      const chunkPromises = chunk.map((query) =>
+        withTimeout(searchMarketNews(query, 0), 8_000, [] as SearchFunctionResultItem[], `web search fallback: ${query.slice(0, 45)}`)
+          .then((items): SourceBatch => ({ source: query, items }))
+          .catch((err): SourceBatch => ({ source: query, items: [], error: String(err) }))
+      );
+      fallbackWebPromises.push(...chunkPromises);
+      if (i + 2 < emptyQueries.length) {
+        await new Promise((resolve) => setTimeout(resolve, 800));
+      }
+    }
+    const fallbackBatches = await Promise.all(fallbackWebPromises);
+    for (const batch of fallbackBatches) {
+      queryResults[batch.source] = batch.items.length;
+      if (batch.error) queryResults[`${batch.source}_error`] = 1;
+    }
+
+    const batches = await Promise.all([rssPromise, ...webBatches, ...fallbackBatches]);
     for (const batch of batches) {
       queryResults[batch.source] = batch.items.length;
       if (batch.error) queryResults[`${batch.source}_error`] = 1;
@@ -567,7 +600,9 @@ export async function POST(request: NextRequest) {
     }
 
     const processed = await processNewsItems(itemsToProcess);
-    const hasWebOrPageSource = queries.some((query) => queryResults[query] > 0) || (queryResults.page_reader_raw || 0) > 0;
+    const hasWebOrPageSource = queries.some(
+      (query) => (queryResults[query] || 0) > 0 || (queryResults[`omniroute:${query}`] || 0) > 0
+    ) || (queryResults.page_reader_raw || 0) > 0;
 
     const result: ScanResult = {
       totalScanned: itemsToProcess.length,

@@ -17,7 +17,6 @@ import {
   Send,
   Bot,
   User,
-  Sparkles,
   Loader2,
   TrendingUp,
   Target,
@@ -60,25 +59,25 @@ const AI_MODELS: {
   description: string
 }[] = [
   {
-    id: 'Qwen/Qwen3-32B',
-    name: 'Qwen3 32B',
-    shortName: '32B',
+    id: 'auto',
+    name: 'OmniRoute Auto',
+    shortName: 'Auto',
     icon: <Brain className="h-3 w-3" />,
-    description: 'Best quality for trading analysis',
+    description: 'Smart routing — best quality for trading analysis',
   },
   {
-    id: 'Qwen/Qwen3-14B',
-    name: 'Qwen3 14B',
-    shortName: '14B',
+    id: 'auto/coding',
+    name: 'Coding Combo',
+    shortName: 'Code',
     icon: <Clock className="h-3 w-3" />,
-    description: 'Balanced fallback',
+    description: 'Structured parsing fallback',
   },
   {
-    id: 'Qwen/Qwen3-8B',
-    name: 'Qwen3 8B',
-    shortName: '8B',
+    id: 'auto/cheap',
+    name: 'Cheap Combo',
+    shortName: 'Cheap',
     icon: <Zap className="h-3 w-3" />,
-    description: 'Fast quick-scan model',
+    description: 'Fast, free-tier-first quick responses',
   },
 ]
 

@@ -30,6 +30,8 @@ const ACTION_TO_PATH: Record<string, { path: string; method: string }> = {
 };
 
 // GET /api/telegram/userbot → proxy to mini-service /status
+export const maxDuration = 60;
+
 export async function GET() {
   try {
     const res = await fetch(

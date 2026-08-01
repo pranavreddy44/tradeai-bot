@@ -28,8 +28,9 @@ export async function GET(request: NextRequest) {
     // Otherwise return all settings as key-value pairs
     const settings = await db.botSetting.findMany();
     const settingsMap: Record<string, string> = {};
+    const secretKeys = ['huggingFaceToken', 'geminiApiKey', 'groqApiKey', 'omniRouteKey'];
     for (const setting of settings) {
-      settingsMap[setting.key] = setting.key === 'huggingFaceToken' ? 'configured' : setting.value;
+      settingsMap[setting.key] = secretKeys.includes(setting.key) ? 'configured' : setting.value;
     }
     return NextResponse.json({ settings: settingsMap });
   } catch (error) {

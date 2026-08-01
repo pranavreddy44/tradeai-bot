@@ -30,7 +30,7 @@ The main app talks to the listener at `http://localhost:3002`.
 
 - **Frontend / API:** Next.js 16, React 19, TypeScript, Tailwind CSS, shadcn/ui
 - **Database:** SQLite via Prisma
-- **AI:** Hugging Face inference (text + vision models) with rule-based fallback
+- **AI:** OmniRoute gateway (auto-fallback across 268+ providers, zero-config) + Groq as a second provider, with rule-based fallback
 - **Telegram:** GramJS (MTProto userbot)
 - **Indicators:** `technicalindicators`
 - **Prices:** Yahoo Finance public API
@@ -63,7 +63,13 @@ At minimum configure:
 
 ```dotenv
 DATABASE_URL="file:./dev.db"
-HF_TOKEN="your_huggingface_token"
+# OmniRoute (default AI provider) — zero-config on http://localhost:20128
+OMNIROUTE_BASE_URL="http://localhost:20128/v1/chat/completions"
+# OMNIROUTE_KEY=""
+# OMNIROUTE_MODEL="auto"
+# OMNIROUTE_JSON_MODEL="oc/nemotron-3-ultra-free"
+# Groq (fallback / second provider)
+# GROQ_API_KEY=""
 ```
 
 Telegram credentials (API ID, API hash, phone) and channels are configured in the UI → **Setup** tab, then stored in the database. Live Telegram messages are analyzed in real time but **do not** auto-create signals.
@@ -101,8 +107,12 @@ Then open http://localhost:3000.
 | Variable | Required | Description |
 |----------|----------|-------------|
 | `DATABASE_URL` | Yes | SQLite database path, e.g. `file:./dev.db` |
-| `HF_TOKEN` | Optional | Hugging Face token for AI models (falls back to rule-based parsing without it) |
-| `GEMINI_API_KEY` / `GROQ_API_KEY` | Optional | Alternative AI providers |
+| `OMNIROUTE_BASE_URL` | Optional | OmniRoute endpoint (default `http://localhost:20128/v1/chat/completions`) |
+| `OMNIROUTE_KEY` | Optional | OmniRoute API key (leave blank for zero-config) |
+| `OMNIROUTE_MODEL` | Optional | OmniRoute model alias (default `auto`) |
+| `OMNIROUTE_JSON_MODEL` | Optional | Fixed model for structured JSON parsing (default `oc/nemotron-3-ultra-free`; overrides combos that may return broken JSON) |
+| `OMNIROUTE_VISION_MODEL` | Optional | Vision model for Telegram chart/image parsing (default `oc/mimo-v2.5-free`; combos like `auto` can land on text-only models) |
+| `GROQ_API_KEY` | Optional | Groq key for the second AI provider |
 | `PORT` | Optional | Web server port (default `3000`) |
 
 ## Database

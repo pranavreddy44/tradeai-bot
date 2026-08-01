@@ -50,7 +50,7 @@ export async function POST(request: NextRequest) {
       data: {
         role,
         content,
-        model: model || 'Qwen/Qwen3-32B',
+        model: model || 'auto',
       },
     });
 

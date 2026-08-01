@@ -2,10 +2,10 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import {
   callConfiguredChatCompletion,
-  DEFAULT_HUGGINGFACE_MODEL,
+  DEFAULT_OMNIROUTE_BASE_URL,
+  DEFAULT_OMNIROUTE_MODEL,
   getConfiguredAIProvider,
-  HUGGINGFACE_TEXT_MODELS,
-  GEMINI_TEXT_MODELS,
+  OMNIROUTE_TEXT_MODELS,
   GROQ_TEXT_MODELS,
 } from '@/lib/ai-engine';
 
@@ -23,46 +23,39 @@ async function getSettingValue(key: string): Promise<string | null> {
 export async function GET() {
   try {
     const activeProvider = await getConfiguredAIProvider();
-    
-    // Hugging Face tokens
-    const hfSettingsToken = await getSettingValue('huggingFaceToken');
-    const hfEnvToken = process.env.HF_TOKEN || process.env.HUGGINGFACE_API_KEY || '';
-    const hfToken = hfEnvToken || hfSettingsToken || '';
-    
-    // Gemini tokens
-    const geminiSettingsToken = await getSettingValue('geminiApiKey');
-    const geminiEnvToken = process.env.GEMINI_API_KEY || '';
-    const geminiToken = geminiEnvToken || geminiSettingsToken || '';
-    
+
+    // OmniRoute tokens + endpoint
+    const omniRouteSettingsToken = await getSettingValue('omniRouteKey');
+    const omniRouteEnvToken = process.env.OMNIROUTE_KEY || '';
+    const omniRouteToken = omniRouteEnvToken || omniRouteSettingsToken || '';
+    const omniRouteBaseUrl = process.env.OMNIROUTE_BASE_URL
+      || await getSettingValue('omniRouteBaseUrl')
+      || DEFAULT_OMNIROUTE_BASE_URL;
+
     // Groq tokens
     const groqSettingsToken = await getSettingValue('groqApiKey');
     const groqEnvToken = process.env.GROQ_API_KEY || '';
     const groqToken = groqEnvToken || groqSettingsToken || '';
 
     // Active model for each provider
-    const hfModel = await getSettingValue('huggingFaceModel') || DEFAULT_HUGGINGFACE_MODEL;
-    const geminiModel = await getSettingValue('geminiModel') || 'gemini-3.5-flash';
+    const omniRouteModel = await getSettingValue('omniRouteModel') || DEFAULT_OMNIROUTE_MODEL;
+    const omniRouteJsonModel = await getSettingValue('omniRouteJsonModel') || 'oc/nemotron-3-ultra-free';
     const groqModel = await getSettingValue('groqModel') || 'llama-3.3-70b-versatile';
 
     return NextResponse.json({
       activeProvider: activeProvider.provider,
       activeModel: activeProvider.model,
-      
+
       // Configuration for all providers so frontend can show previews and status
       providers: {
-        huggingface: {
-          model: hfModel,
-          hasToken: Boolean(hfToken),
-          tokenSource: hfEnvToken ? 'env' : (hfSettingsToken ? 'settings' : 'none'),
-          tokenPreview: tokenPreview(hfToken),
-          models: HUGGINGFACE_TEXT_MODELS,
-        },
-        gemini: {
-          model: geminiModel,
-          hasToken: Boolean(geminiToken),
-          tokenSource: geminiEnvToken ? 'env' : (geminiSettingsToken ? 'settings' : 'none'),
-          tokenPreview: tokenPreview(geminiToken),
-          models: GEMINI_TEXT_MODELS,
+        omniroute: {
+          model: omniRouteModel,
+          jsonModel: omniRouteJsonModel,
+          baseUrl: omniRouteBaseUrl,
+          hasToken: Boolean(omniRouteToken),
+          tokenSource: omniRouteEnvToken ? 'env' : (omniRouteSettingsToken ? 'settings' : 'none'),
+          tokenPreview: tokenPreview(omniRouteToken),
+          models: OMNIROUTE_TEXT_MODELS,
         },
         groq: {
           model: groqModel,
@@ -85,11 +78,13 @@ export async function GET() {
 export async function PUT(request: NextRequest) {
   try {
     const body = await request.json().catch(() => ({}));
-    const provider = typeof body.provider === 'string' ? body.provider.trim() : 'huggingface';
+    const provider = typeof body.provider === 'string' ? body.provider.trim() : 'omniroute';
     const model = typeof body.model === 'string' && body.model.trim() ? body.model.trim() : '';
+    const jsonModel = typeof body.jsonModel === 'string' && body.jsonModel.trim() ? body.jsonModel.trim() : '';
     const token = typeof body.token === 'string' ? body.token.trim() : '';
+    const baseUrl = typeof body.baseUrl === 'string' ? body.baseUrl.trim() : '';
 
-    if (!['huggingface', 'gemini', 'groq'].includes(provider)) {
+    if (!['omniroute', 'groq'].includes(provider)) {
       return NextResponse.json({ error: 'Invalid provider' }, { status: 400 });
     }
 
@@ -101,21 +96,36 @@ export async function PUT(request: NextRequest) {
     });
 
     // Save model and token based on selected provider
-    if (provider === 'gemini') {
-      const activeModel = model || 'gemini-3.5-flash';
+    if (provider === 'omniroute') {
+      const activeModel = model || DEFAULT_OMNIROUTE_MODEL;
       await db.botSetting.upsert({
-        where: { key: 'geminiModel' },
-        create: { key: 'geminiModel', value: activeModel },
+        where: { key: 'omniRouteModel' },
+        create: { key: 'omniRouteModel', value: activeModel },
         update: { value: activeModel },
       });
+      if (baseUrl) {
+        await db.botSetting.upsert({
+          where: { key: 'omniRouteBaseUrl' },
+          create: { key: 'omniRouteBaseUrl', value: baseUrl },
+          update: { value: baseUrl },
+        });
+      }
+      if (jsonModel) {
+        await db.botSetting.upsert({
+          where: { key: 'omniRouteJsonModel' },
+          create: { key: 'omniRouteJsonModel', value: jsonModel },
+          update: { value: jsonModel },
+        });
+      }
       if (token && token !== 'configured') {
         await db.botSetting.upsert({
-          where: { key: 'geminiApiKey' },
-          create: { key: 'geminiApiKey', value: token },
+          where: { key: 'omniRouteKey' },
+          create: { key: 'omniRouteKey', value: token },
           update: { value: token },
         });
       }
-    } else if (provider === 'groq') {
+    } else {
+      // groq
       const activeModel = model || 'llama-3.3-70b-versatile';
       await db.botSetting.upsert({
         where: { key: 'groqModel' },
@@ -126,21 +136,6 @@ export async function PUT(request: NextRequest) {
         await db.botSetting.upsert({
           where: { key: 'groqApiKey' },
           create: { key: 'groqApiKey', value: token },
-          update: { value: token },
-        });
-      }
-    } else {
-      // huggingface
-      const activeModel = model || DEFAULT_HUGGINGFACE_MODEL;
-      await db.botSetting.upsert({
-        where: { key: 'huggingFaceModel' },
-        create: { key: 'huggingFaceModel', value: activeModel },
-        update: { value: activeModel },
-      });
-      if (token && token !== 'configured') {
-        await db.botSetting.upsert({
-          where: { key: 'huggingFaceToken' },
-          create: { key: 'huggingFaceToken', value: token },
           update: { value: token },
         });
       }

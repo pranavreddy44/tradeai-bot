@@ -34,15 +34,15 @@ interface ConsensusData {
 }
 
 const modelIcons: Record<string, React.ReactNode> = {
-  'Qwen3 32B': <Brain className="h-4 w-4" />,
-  'Qwen3 14B': <Gauge className="h-4 w-4" />,
-  'Qwen3 8B': <Zap className="h-4 w-4" />,
+  'OmniRoute Auto': <Brain className="h-4 w-4" />,
+  'Coding Combo': <Gauge className="h-4 w-4" />,
+  'Cheap Combo': <Zap className="h-4 w-4" />,
 }
 
 const modelColors: Record<string, string> = {
-  'Qwen3 32B': 'text-emerald-400 bg-emerald-500/15',
-  'Qwen3 14B': 'text-purple-400 bg-purple-500/15',
-  'Qwen3 8B': 'text-amber-400 bg-amber-500/15',
+  'OmniRoute Auto': 'text-emerald-400 bg-emerald-500/15',
+  'Coding Combo': 'text-purple-400 bg-purple-500/15',
+  'Cheap Combo': 'text-amber-400 bg-amber-500/15',
 }
 
 export function MultiModelConsensus() {

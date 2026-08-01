@@ -2,8 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import {
   callConfiguredChatCompletion,
   getConfiguredAIProvider,
-  HUGGINGFACE_TEXT_MODELS,
-  GEMINI_TEXT_MODELS,
+  OMNIROUTE_TEXT_MODELS,
   GROQ_TEXT_MODELS,
 } from '@/lib/ai-engine';
 
@@ -15,12 +14,10 @@ export async function POST(request: NextRequest) {
 
     const activeProvider = await getConfiguredAIProvider();
     let models: readonly any[] = [];
-    if (activeProvider.provider === 'gemini') {
-      models = GEMINI_TEXT_MODELS;
-    } else if (activeProvider.provider === 'groq') {
+    if (activeProvider.provider === 'groq') {
       models = GROQ_TEXT_MODELS;
     } else {
-      models = HUGGINGFACE_TEXT_MODELS;
+      models = OMNIROUTE_TEXT_MODELS;
     }
 
     const prompt = `Analyze the Indian stock ${symbol} on NSE. Provide:

@@ -124,6 +124,19 @@ function getISTTimestamp(): string {
   return istTime.toISOString().replace("Z", "+05:30");
 }
 
+// Detect image MIME type from file magic bytes (Telegram photos are usually
+// JPEG/PNG/WebP/GIF; hardcoding "image/jpeg" corrupts decoding of the others).
+function detectImageMime(buffer: Buffer): string {
+  if (buffer.length >= 8) {
+    if (buffer[0] === 0x89 && buffer[1] === 0x50 && buffer[2] === 0x4e && buffer[3] === 0x47) return "image/png";
+    if (buffer[0] === 0x52 && buffer[1] === 0x49 && buffer[2] === 0x46 && buffer[3] === 0x46) return "image/webp";
+    if (buffer[0] === 0x47 && buffer[1] === 0x49 && buffer[2] === 0x46) return "image/gif";
+    if (buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff) return "image/jpeg";
+  }
+  if (buffer[0] === 0x42 && buffer[1] === 0x4d) return "image/bmp";
+  return "image/jpeg";
+}
+
 function log(
   level: "INFO" | "WARN" | "ERROR" | "DEBUG",
   message: string,
@@ -302,7 +315,7 @@ function startMonitoring(client: TelegramClient): void {
             body: JSON.stringify({
               action: "test-image-signal",
               base64Image: imageBuffer.toString("base64"),
-              mimeType: "image/jpeg",
+              mimeType: detectImageMime(imageBuffer),
               channelId: chatIdStr || chatUsername,
               caption: text || "",
               date: message.date ? new Date(message.date * 1000).toISOString() : new Date().toISOString(),
@@ -1203,7 +1216,7 @@ const server = Bun.serve({
               messageId: photoMessage.id,
               date: photoMessage.date ? new Date(photoMessage.date * 1000).toISOString() : new Date().toISOString(),
               caption: text,
-              mimeType: "image/jpeg",
+              mimeType: detectImageMime(imageBuffer),
               sizeBytes: imageBuffer.length,
               base64Image: imageBuffer.toString("base64"),
               error: null,
