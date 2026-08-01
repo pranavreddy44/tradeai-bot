@@ -11,9 +11,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import {
   Trophy,
   TrendingUp,
-  TrendingDown,
   Activity,
-  Brain,
   MessageSquare,
   User,
   Zap,
@@ -39,7 +37,7 @@ function formatCurrency(num: number): string {
 export interface SourceStats {
   id: string
   name: string
-  type: 'AI Model' | 'Telegram' | 'Manual' | 'Other'
+  type: 'Telegram' | 'Manual' | 'Other'
 
   totalCount: number
   executedCount: number
@@ -62,7 +60,7 @@ interface SourceLeaderboardProps {
 
 export function SourceLeaderboard({ onViewSourceSignals }: SourceLeaderboardProps) {
   const signals = useAutoTradeStore(s => s.signals)
-  const [filterType, setFilterType] = useState<'all' | 'ai' | 'telegram'>('all')
+  const [filterType, setFilterType] = useState<'all' | 'telegram'>('all')
 
   const [sortBy, setSortBy] = useState<'winRate' | 'profitFactor' | 'totalCount' | 'totalPnl'>('winRate')
   const [searchQuery, setSearchQuery] = useState('')
@@ -74,18 +72,17 @@ export function SourceLeaderboard({ onViewSourceSignals }: SourceLeaderboardProp
     signals.forEach((s: TradeSignal) => {
       let id = ''
       let name = ''
-      let type: 'AI Model' | 'Telegram' | 'Manual' | 'Other' = 'Other'
+      let type: 'Telegram' | 'Manual' | 'Other' = 'Other'
 
       const sourceLower = s.source.toLowerCase()
+
+      // Skip AI-model generated signals — the leaderboard ranks channel sources
+      if (sourceLower.startsWith('ai') || s.modelName) return
 
       if (sourceLower === 'manual') {
         id = 'manual'
         name = 'Manual Trades'
         type = 'Manual'
-      } else if (sourceLower.startsWith('ai') || s.modelName) {
-        id = s.modelName || s.source
-        name = s.modelName || (s.source === 'ai-news' ? 'AI News' : 'AI Technical')
-        type = 'AI Model'
       } else if (sourceLower.startsWith('telegram')) {
         id = s.channelId || 'telegram-general'
         name = s.channelId || 'Telegram Channel'
@@ -174,7 +171,6 @@ export function SourceLeaderboard({ onViewSourceSignals }: SourceLeaderboardProp
 
         // Type filter
         if (filterType === 'all') return true
-        if (filterType === 'ai') return stats.type === 'AI Model'
         if (filterType === 'telegram') return stats.type === 'Telegram'
         return true
 
@@ -222,8 +218,6 @@ export function SourceLeaderboard({ onViewSourceSignals }: SourceLeaderboardProp
   // Render proper icon for source type
   const getSourceIcon = (type: string) => {
     switch (type) {
-      case 'AI Model':
-        return <Brain className="h-4 w-4 text-emerald-400" />
       case 'Telegram':
         return <MessageSquare className="h-4 w-4 text-blue-400" />
       case 'Manual':
@@ -333,12 +327,6 @@ export function SourceLeaderboard({ onViewSourceSignals }: SourceLeaderboardProp
                 className={`px-2.5 py-1 rounded-sm transition-colors ${filterType === 'all' ? 'bg-primary/20 text-primary' : 'text-muted-foreground hover:text-foreground'}`}
               >
                 All
-              </button>
-              <button
-                onClick={() => setFilterType('ai')}
-                className={`px-2.5 py-1 rounded-sm transition-colors ${filterType === 'ai' ? 'bg-emerald-500/20 text-emerald-400' : 'text-muted-foreground hover:text-foreground'}`}
-              >
-                AI
               </button>
               <button
                 onClick={() => setFilterType('telegram')}
