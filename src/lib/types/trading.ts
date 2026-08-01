@@ -64,7 +64,6 @@ export interface Settings {
   maxDailyTrades: number
   stopLossDefault: number
   riskPerTrade: number
-  broker: 'groww'
   telegramChannels: TelegramChannel[]
   watchlist: string[]
   autoPauseOnMacroEvents: boolean

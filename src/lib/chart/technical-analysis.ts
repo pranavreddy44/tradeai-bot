@@ -1,6 +1,4 @@
 import { BollingerBands, EMA, MACD, RSI, SMA } from 'technicalindicators';
-import { db } from '@/lib/db';
-import { GrowwClient, type GrowwAuthConfig } from '@/lib/broker/groww-client';
 import type { AISignalOutput, VLMImageParseResult } from '@/lib/ai-engine';
 
 type Candle = {
@@ -23,103 +21,51 @@ function asNumber(value: unknown): number | null {
   return Number.isFinite(n) && n > 0 ? n : null;
 }
 
-async function getActiveGrowwClient(): Promise<GrowwClient | null> {
-  const credential = await db.brokerCredential.findFirst({
-    where: { broker: 'groww', isActive: true },
-  });
-
-  if (!credential?.accessToken || !credential.apiKey) return null;
-
-  const config: GrowwAuthConfig = {
-    apiKey: credential.apiKey,
-    apiSecret: credential.apiSecret || undefined,
-    totpSecret: credential.totpSecret || undefined,
-    authMethod: credential.authMethod as 'approval' | 'totp',
-    accessToken: credential.accessToken,
-  };
-
-  return new GrowwClient(config);
-}
-
-function normalizeCandle(raw: unknown): Candle | null {
-  if (Array.isArray(raw)) {
-    const [time, open, high, low, close, volume] = raw;
-    const o = asNumber(open);
-    const h = asNumber(high);
-    const l = asNumber(low);
-    const c = asNumber(close);
-    if (!o || !h || !l || !c) return null;
-    return {
-      time: String(time || ''),
-      open: o,
-      high: h,
-      low: l,
-      close: c,
-      volume: Number(volume) || 0,
-    };
-  }
-
-  if (raw && typeof raw === 'object') {
-    const row = raw as Record<string, unknown>;
-    const o = asNumber(row.open ?? row.o);
-    const h = asNumber(row.high ?? row.h);
-    const l = asNumber(row.low ?? row.l);
-    const c = asNumber(row.close ?? row.c);
-    if (!o || !h || !l || !c) return null;
-    return {
-      time: String(row.time ?? row.timestamp ?? row.date ?? ''),
-      open: o,
-      high: h,
-      low: l,
-      close: c,
-      volume: Number(row.volume ?? row.v) || 0,
-    };
-  }
-
-  return null;
-}
-
 function extractCandles(response: unknown): Candle[] {
-  const payload = response && typeof response === 'object'
-    ? (response as Record<string, unknown>).payload ?? response
-    : response;
-  const possible = payload && typeof payload === 'object'
-    ? (payload as Record<string, unknown>).candles
-      ?? (payload as Record<string, unknown>).data
-      ?? (payload as Record<string, unknown>).ohlc
-    : payload;
+  const result = response && typeof response === 'object'
+    ? (response as Record<string, any>).chart?.result?.[0]
+    : null;
+  if (!result) return [];
 
-  if (!Array.isArray(possible)) return [];
-  return possible.map(normalizeCandle).filter((c): c is Candle => Boolean(c));
-}
+  const timestamps: number[] = Array.isArray(result.timestamp) ? result.timestamp : [];
+  const quote = result?.indicators?.quote?.[0];
+  if (!quote) return [];
 
-function getDateRange(days: number): { start: string; end: string } {
-  const end = new Date();
-  const start = new Date(end);
-  start.setDate(start.getDate() - days);
-  start.setHours(9, 15, 0, 0);
-  end.setHours(15, 30, 0, 0);
-  return {
-    start: start.toISOString().slice(0, 19),
-    end: end.toISOString().slice(0, 19),
-  };
+  const candles: Candle[] = [];
+  for (let i = 0; i < timestamps.length; i++) {
+    const time = timestamps[i];
+    const o = asNumber(quote.open?.[i]);
+    const h = asNumber(quote.high?.[i]);
+    const l = asNumber(quote.low?.[i]);
+    const c = asNumber(quote.close?.[i]);
+    if (!o || !h || !l || !c) continue;
+    candles.push({
+      time: new Date(time * 1000).toISOString(),
+      open: o,
+      high: h,
+      low: l,
+      close: c,
+      volume: Number(quote.volume?.[i]) || 0,
+    });
+  }
+  return candles;
 }
 
 async function fetchDailyCandles(symbol: string): Promise<Candle[]> {
-  const client = await getActiveGrowwClient();
-  if (!client) return [];
+  const cleanSymbol = symbol.toUpperCase().trim();
+  const yahooSymbol = cleanSymbol === 'NIFTY' ? '^NSEI' : cleanSymbol === 'SENSEX' ? '^BSESN' : `${cleanSymbol}.NS`;
 
-  const range = getDateRange(420);
-  const response = await client.getHistoricalCandles({
-    exchange: 'NSE',
-    segment: 'CASH',
-    groww_symbol: symbol.toUpperCase(),
-    start_time: range.start,
-    end_time: range.end,
-    candle_interval: '1day',
-  });
-
-  return extractCandles(response);
+  const res = await fetch(
+    `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(yahooSymbol)}?range=2y&interval=1d`,
+    {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+      },
+      signal: AbortSignal.timeout(8000),
+    }
+  );
+  if (!res.ok) return [];
+  return extractCandles(await res.json());
 }
 
 function nearestAbove(levels: number[] | undefined, price: number): number | null {
@@ -146,7 +92,7 @@ export async function validateChartSignalWithIndicators(
       return {
         ...signal,
         confidence: Math.max(45, Math.min(signal.confidence, 68)),
-        reasoning: `${signal.reasoning} | Chart library validation skipped: not enough Groww historical candles available.`,
+        reasoning: `${signal.reasoning} | Chart library validation skipped: not enough historical candles available.`,
       };
     }
 
@@ -215,7 +161,7 @@ export async function validateChartSignalWithIndicators(
       targetPrice,
       stopLoss,
       confidence,
-      reasoning: `${signal.reasoning} | Verified with technicalindicators on Groww candles: ${checks.join(', ') || 'mixed signal'}. Latest close ₹${entryPrice}, recent support ₹${roundPrice(recentSupport)}, recent resistance ₹${roundPrice(recentResistance)}.`,
+      reasoning: `${signal.reasoning} | Verified with technicalindicators on daily candles: ${checks.join(', ') || 'mixed signal'}. Latest close ₹${entryPrice}, recent support ₹${roundPrice(recentSupport)}, recent resistance ₹${roundPrice(recentResistance)}.`,
     };
   } catch (error) {
     return {

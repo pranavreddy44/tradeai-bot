@@ -60,39 +60,6 @@ export interface LivePosition {
   action: 'BUY' | 'SELL'
 }
 
-export interface BrokerOrder {
-  id: string
-  growwOrderId?: string
-  tradingSymbol: string
-  exchange: string
-  transactionType: string
-  quantity: number
-  price?: number
-  status: string
-  createdAt: string
-}
-
-export interface GrowwStatus {
-  connected: boolean
-  hasCredentials: boolean
-  accessTokenValid?: boolean
-  profile?: {
-    vendorUserId: string
-    ucc: string
-    nseEnabled: boolean
-    bseEnabled: boolean
-    activeSegments: string[]
-  }
-  margin?: {
-    clearCash: number
-    netMarginUsed: number
-    collateralAvailable: number
-  }
-  error?: string
-  hint?: string
-  authMethod?: string
-}
-
 export type RiskLevel = 'conservative' | 'moderate' | 'aggressive'
 export type BotStatus = 'running' | 'stopped' | 'scanning'
 
@@ -139,10 +106,6 @@ interface AutoTradeStore {
   config: BotConfig
   updateConfig: (config: Partial<BotConfig>) => void
 
-  // Groww
-  growwStatus: GrowwStatus | null
-  setGrowwStatus: (status: GrowwStatus | null) => void
-
   // Signals
   signals: TradeSignal[]
   setSignals: (signals: TradeSignal[]) => void
@@ -164,8 +127,6 @@ interface AutoTradeStore {
   // Trades
   positions: LivePosition[]
   setPositions: (positions: LivePosition[]) => void
-  orders: BrokerOrder[]
-  setOrders: (orders: BrokerOrder[]) => void
   todayPnl: number
   setTodayPnl: (pnl: number) => void
   totalTrades: number
@@ -222,9 +183,6 @@ export const useAutoTradeStore = create<AutoTradeStore>((set) => ({
   config: defaultConfig,
   updateConfig: (partial) => set((state) => ({ config: { ...state.config, ...partial } })),
 
-  growwStatus: null,
-  setGrowwStatus: (growwStatus) => set({ growwStatus }),
-
   signals: [],
   setSignals: (signals) => set({ signals }),
   signalFilter: 'all',
@@ -243,8 +201,6 @@ export const useAutoTradeStore = create<AutoTradeStore>((set) => ({
 
   positions: [],
   setPositions: (positions) => set({ positions }),
-  orders: [],
-  setOrders: (orders) => set({ orders }),
   todayPnl: 0,
   setTodayPnl: (todayPnl) => set({ todayPnl }),
   totalTrades: 0,

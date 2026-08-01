@@ -14,10 +14,10 @@ export async function GET(
     }
 
     const { validateChartSignalWithIndicators } = await import('@/lib/chart/technical-analysis');
-    const { getGrowwLivePrice } = await import('@/lib/broker/live-prices');
+    const { getLivePrice } = await import('@/lib/broker/live-prices');
 
     const [livePrice, technicalResult] = await Promise.all([
-      getGrowwLivePrice(signal.symbol),
+      getLivePrice(signal.symbol),
       validateChartSignalWithIndicators(
         {
           symbol: signal.symbol,

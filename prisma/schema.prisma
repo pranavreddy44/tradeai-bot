@@ -3,7 +3,7 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
+  provider = "sqlite"
   url      = env("DATABASE_URL")
 }
 
@@ -35,7 +35,6 @@ model TradeSignal {
   updatedAt   DateTime @updatedAt
 
   positions   Position[]
-  brokerOrder BrokerOrder?
 
   @@index([status])
   @@index([createdAt])
@@ -159,46 +158,5 @@ model ChatMessage {
   content   String
   model     String   @default("glm-4-plus")
   createdAt DateTime @default(now())
-}
-
-model BrokerCredential {
-  id           String   @id @default(cuid())
-  broker       String   // "groww" or "zerodha"
-  apiKey       String   // Groww: API key / TOTP token; Zerodha: API key
-  apiSecret    String?  // Groww: API secret (for approval flow); Zerodha: API secret
-  accessToken  String?  // Generated access token
-  authMethod   String   @default("approval") // "approval", "totp", or "direct"
-  totpSecret   String?  // TOTP secret for generating TOTP codes
-  isActive     Boolean  @default(true)
-  userId       String?  // Broker user ID
-  userName     String?  // Broker user name
-  lastVerified DateTime?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
-}
-
-model BrokerOrder {
-  id              String   @id @default(cuid())
-  broker          String   @default("groww")
-  growwOrderId    String?  // Groww order ID
-  orderRefId      String?  // Order reference ID
-  signalId        String?  @unique // Linked TradeSignal ID
-  tradingSymbol   String
-  exchange        String   @default("NSE")
-  segment         String   @default("CASH")
-  product         String   @default("MIS")
-  orderType       String   @default("MARKET")
-  transactionType String   // BUY or SELL
-  quantity        Int
-  price           Float?
-  triggerPrice    Float?
-  status          String   @default("pending") // pending, submitted, filled, cancelled, rejected
-  filledQty       Int      @default(0)
-  avgFillPrice    Float?
-  remark          String?
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-
-  signal          TradeSignal? @relation(fields: [signalId], references: [id])
 }
 

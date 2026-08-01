@@ -306,7 +306,7 @@ function startMonitoring(client: TelegramClient): void {
               channelId: chatIdStr || chatUsername,
               caption: text || "",
               date: message.date ? new Date(message.date * 1000).toISOString() : new Date().toISOString(),
-              createSignals: true,
+              createSignals: false,
             }),
           });
           const imageResult = await imageRes.json() as {
@@ -339,6 +339,7 @@ function startMonitoring(client: TelegramClient): void {
               body: JSON.stringify({
                 message: imageSignalText,
                 channelId: chatIdStr || chatUsername,
+                live: true,
               }),
             });
             log("INFO", `✅ Forwarded image signal from ${displayId} for AI analysis`);
@@ -356,7 +357,7 @@ function startMonitoring(client: TelegramClient): void {
     }
 
     if (text.trim()) {
-      // Forward to main app for AI analysis
+      // Forward to main app for AI analysis (analysis only, no auto signal creation)
       try {
         await fetch(`${MAIN_APP_BASE}/api/ai/telegram-analyze`, {
           method: "POST",
@@ -365,6 +366,7 @@ function startMonitoring(client: TelegramClient): void {
             message: text,
             channelId: chatIdStr || chatUsername,
             messageAt: message.date ? new Date(message.date * 1000).toISOString() : null,
+            live: true,
           }),
         });
         log("INFO", `✅ Forwarded message from ${displayId} for AI analysis`);

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { buildTrustedTelegramCandidate, parseTelegramSignal, type TelegramParseResult } from '@/lib/ai-engine';
 import { inferTradeType, parseSourceTimestamp } from '@/lib/trade-classification';
-import { getGrowwLivePrice } from '@/lib/broker/live-prices';
+import { getLivePrice } from '@/lib/broker/live-prices';
 import { resolveInstrumentFromText } from '@/lib/market/instrument-resolver';
 
 // POST /api/ai/telegram-analyze - Analyze a Telegram message for trading signals
@@ -44,12 +44,12 @@ export async function POST(request: NextRequest) {
       const resolvedInstrument = await resolveInstrumentFromText(body.message).catch(() => null);
       const preliminary = buildTrustedTelegramCandidate(body.message, null, resolvedInstrument?.symbol);
       const symbol = preliminary.signal?.symbol || resolvedInstrument?.symbol || null;
-      const livePrice = symbol ? await getGrowwLivePrice(symbol) : null;
+      const livePrice = symbol ? await getLivePrice(symbol) : null;
       const recovered = buildTrustedTelegramCandidate(body.message, livePrice, resolvedInstrument?.symbol);
       if (recovered.isValid) {
         result = {
           ...recovered,
-          reasoning: `${recovered.reasoning} ${resolvedInstrument ? `Resolved via Groww instruments (${resolvedInstrument.matchType}: ${resolvedInstrument.name}).` : ''} Recovered from AI rejection: ${result.reasoning || 'not provided'}`,
+          reasoning: `${recovered.reasoning} ${resolvedInstrument ? `Resolved via instrument list (${resolvedInstrument.matchType}: ${resolvedInstrument.name}).` : ''} Recovered from AI rejection: ${result.reasoning || 'not provided'}`,
         };
       }
     }
@@ -69,8 +69,21 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    // Step 3: If valid, create a trade signal
+    // Step 3: If valid, create a trade signal.
+    // Live auto-forwarded messages (from the Telegram listener) are analyzed
+    // and stored in AI decisions but do NOT create signals automatically.
+    // Signals are only created on explicit user action (Scan All / Generate).
     if (result.isValid && result.signal) {
+      if (body.live === true) {
+        return NextResponse.json({
+          isValid: true,
+          created: false,
+          signal: result.signal,
+          reasoning: result.reasoning,
+          aiDecisionId: aiDecision.id,
+        });
+      }
+
       const { getSourceConfidenceMultiplier } = await import('@/lib/signals/source-performance');
       const sourceMultiplier = await getSourceConfidenceMultiplier('telegram', channelId);
       const weightedConfidence = Math.min(95, Math.round(result.signal.confidence * sourceMultiplier));

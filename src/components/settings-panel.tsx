@@ -39,7 +39,6 @@ import {
 } from 'lucide-react'
 import type { TelegramChannel } from '@/lib/types/trading'
 import { NIFTY50_SYMBOLS } from '@/lib/types/trading'
-import { GrowwSetupGuide } from '@/components/groww-setup-guide'
 import { TelegramSetupGuide } from '@/components/telegram-setup-guide'
 import { motion } from 'framer-motion'
 import { toast } from 'sonner'
@@ -737,14 +736,11 @@ export function SettingsPanel() {
       {/* Section 4: Telegram Setup Guide (replaces old channels section) */}
       <TelegramSetupGuide />
 
-      {/* Section 5: Broker Integration */}
-      <GrowwSetupGuide />
-
-      {/* Section 6: Notification Preferences */}
+      {/* Section 5: Notification Preferences */}
       <Card className="overflow-hidden">
         <CardContent className="p-5">
           <SectionHeader
-            number={6}
+            number={5}
             icon={<Bell className="h-5 w-5 text-pink-500" />}
             title="Notification Preferences"
           />
@@ -819,7 +815,7 @@ export function SettingsPanel() {
       <Card className="overflow-hidden">
         <CardContent className="p-5">
           <SectionHeader
-            number={7}
+            number={6}
             icon={<Eye className="h-5 w-5 text-cyan-500" />}
             title="Watchlist Management"
           />

@@ -58,7 +58,7 @@ DATABASE_URL="file:./prisma/dev.db"
 HF_TOKEN="your_huggingface_token"
 ```
 
-Groww credentials, Telegram credentials/session, broker settings, channels, and AI model settings are currently stored through the app/database settings. If you do not move the database, configure them again in the UI on the new platform.
+Telegram credentials/session, channels, and AI model settings are currently stored through the app/database settings. If you do not move the database, configure them again in the UI on the new platform.
 
 ## Start Locally
 
@@ -92,7 +92,7 @@ db/custom.db
 
 For a simple private handoff, include these files so settings and saved signals move with the project.
 
-For a public or shared handoff, do not include the database because it may contain broker credentials, Telegram settings, access tokens, API keys, and private trading data. Recreate it with:
+For a public or shared handoff, do not include the database because it may contain Telegram settings, access tokens, API keys, and private trading data. Recreate it with:
 
 ```bash
 npm run db:push
@@ -105,10 +105,8 @@ Then reconfigure settings in the UI.
 Reconfigure these on the new platform:
 
 - `HF_TOKEN`
-- Groww API key / access token / TOTP settings
 - Telegram API ID, API hash, phone, and session/login state
 - Any saved AI model provider settings
-- Static IP / broker IP restrictions if deploying to a real server
 
 ## Verification Commands
 
@@ -130,7 +128,7 @@ Expected Telegram status when configured:
 
 ## Latest Important Code Areas
 
-- `src/lib/market/instrument-resolver.ts`: dynamic Groww instrument resolver for Telegram stock names/symbols
+- `src/lib/market/instrument-resolver.ts`: dynamic NSE instrument resolver for Telegram stock names/symbols
 - `src/lib/ai-engine.ts`: Telegram/news/image AI parsing and trusted Telegram fallback logic
 - `src/app/api/telegram/route.ts`: channel scan and signal creation API
 - `src/app/api/ai/telegram-analyze/route.ts`: realtime Telegram message analysis API

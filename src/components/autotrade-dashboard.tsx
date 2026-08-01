@@ -57,7 +57,6 @@ export function AutoTradeDashboard() {
   const {
     botStatus, setBotStatus,
     config, updateConfig,
-    growwStatus, setGrowwStatus,
     signals,
     setLastScanTime,
     setSentiment,
@@ -68,20 +67,6 @@ export function AutoTradeDashboard() {
   const [activeTab, setActiveTab] = useState('signals')
   const [signalsSubTab, setSignalsSubTab] = useState<'feed' | 'leaderboard'>('feed')
   const [leaderboardSourceFilter, setLeaderboardSourceFilter] = useState<string | null>(null)
-
-  // Fetch Groww status
-  useEffect(() => {
-    async function checkGroww() {
-      try {
-        const res = await fetch('/api/broker/groww?action=status')
-        const data = await res.json()
-        setGrowwStatus(data)
-      } catch {}
-    }
-    checkGroww()
-    const interval = setInterval(checkGroww, 60000)
-    return () => clearInterval(interval)
-  }, [setGrowwStatus])
 
   // Fetch bot settings
   useEffect(() => {
@@ -106,8 +91,6 @@ export function AutoTradeDashboard() {
 
 
 
-  const connected = growwStatus?.connected
-  const margin = growwStatus?.margin?.clearCash || 0
   const pendingSignals = signals.filter(s => s.status === 'pending').length
   const newsCount = useAutoTradeStore(s => s.newsItems.length)
 
@@ -157,35 +140,12 @@ export function AutoTradeDashboard() {
                 </Badge>
               )}
 
-              {/* Margin / Budget */}
+              {/* Budget */}
               <div className="hidden sm:flex items-center gap-1.5 text-xs text-muted-foreground">
                 <Wallet className="h-3.5 w-3.5" />
-                {connected ? (
-                  <>
-                    <span>₹{margin.toLocaleString()}</span>
-                    <span className="text-[9px] text-emerald-400">Margin</span>
-                  </>
-                ) : (
-                  <>
-                    <span>₹{config.totalBudget.toLocaleString()}</span>
-                    <span className="text-[9px]">Budget</span>
-                  </>
-                )}
+                <span>₹{config.totalBudget.toLocaleString()}</span>
+                <span className="text-[9px]">Budget</span>
               </div>
-
-              {/* Connect status */}
-              <Badge
-                variant="outline"
-                className={`text-[10px] h-6 px-2 gap-1 cursor-pointer ${
-                  connected
-                    ? 'text-emerald-400 border-emerald-500/20 bg-emerald-500/5'
-                    : 'text-muted-foreground border-border/50'
-                }`}
-                onClick={() => setActiveTab('setup')}
-              >
-                {connected ? <Wifi className="h-3 w-3" /> : <WifiOff className="h-3 w-3" />}
-                <span className="hidden sm:inline">{connected ? 'Groww' : 'Connect'}</span>
-              </Badge>
             </div>
           </div>
         </div>

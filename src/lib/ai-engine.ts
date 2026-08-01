@@ -1049,7 +1049,7 @@ export async function qualityGateTelegramParseResult(result: TelegramParseResult
   ];
 
   const { resolveInstrumentFromText } = await import('@/lib/market/instrument-resolver');
-  const { getGrowwLivePrice } = await import('@/lib/broker/live-prices');
+  const { getLivePrice } = await import('@/lib/broker/live-prices');
 
   // Pre-resolve the instrument dynamically so we can check if it is dynamically resolved
   const resolved = await resolveInstrumentFromText(message).catch(() => null);
@@ -1076,7 +1076,7 @@ export async function qualityGateTelegramParseResult(result: TelegramParseResult
   if (accepted.length === 0) {
     const symbolFromSignal = rawSignals[0]?.symbol || null;
     const finalSymbol = symbolFromSignal || resolvedSymbol;
-    const livePrice = finalSymbol ? await getGrowwLivePrice(finalSymbol).catch(() => null) : null;
+    const livePrice = finalSymbol ? await getLivePrice(finalSymbol).catch(() => null) : null;
 
     const fallback = buildTrustedTelegramCandidate(message, livePrice, finalSymbol);
     if (fallback.isValid) {
@@ -1835,8 +1835,8 @@ export async function deriveTrustedMentionSignal(text: string): Promise<ImageSig
   const symbol = normalizeTrustedSymbol(null, text);
   if (!symbol) return null;
 
-  const { getGrowwLivePrice } = await import('@/lib/broker/live-prices');
-  const livePrice = await getGrowwLivePrice(symbol);
+  const { getLivePrice } = await import('@/lib/broker/live-prices');
+  const livePrice = await getLivePrice(symbol);
   if (!livePrice) return null;
 
   const entryPrice = roundSignalPrice(livePrice);
@@ -1847,7 +1847,7 @@ export async function deriveTrustedMentionSignal(text: string): Promise<ImageSig
     targetPrice: roundSignalPrice(entryPrice * 1.04),
     stopLoss: roundSignalPrice(entryPrice * 0.97),
     confidence: 60,
-    notes: `Trusted Telegram mention fallback from caption/text. No explicit target or SL was posted; levels derived from Groww live price for manual review only.`,
+    notes: `Trusted Telegram mention fallback from caption/text. No explicit target or SL was posted; levels derived from live price for manual review only.`,
   };
 }
 
@@ -1944,10 +1944,10 @@ export async function deriveTrustedTextSignal(extractedText: string): Promise<Im
   }
 
   // --- Fetch live price as fallback entry ---
-  const { getGrowwLivePrice } = await import('@/lib/broker/live-prices');
+  const { getLivePrice } = await import('@/lib/broker/live-prices');
   let livePrice: number | null = null;
   if (!entryPrice || !Number.isFinite(entryPrice)) {
-    livePrice = await getGrowwLivePrice(isOption ? symbol.replace(/\d+(CE|PE)$/, '') : symbol);
+    livePrice = await getLivePrice(isOption ? symbol.replace(/\d+(CE|PE)$/, '') : symbol);
     if (livePrice) entryPrice = roundSignalPrice(livePrice);
   }
   if (!entryPrice || !Number.isFinite(entryPrice) || entryPrice <= 0) return null;

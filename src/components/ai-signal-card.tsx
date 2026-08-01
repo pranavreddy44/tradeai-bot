@@ -178,126 +178,6 @@ export function AISignalCard({ signal, onExecute, onSignalClick }: AISignalCardP
   const handleExecute = async () => {
     setIsExecuting(true)
     try {
-      // First, try to execute on Groww broker if connected
-      let brokerOrderId = null
-      let brokerSucceeded = false
-
-      try {
-        // Check if Groww is connected before attempting broker execution
-        const statusRes = await fetch('/api/broker/groww?action=status')
-        let statusData: any = { connected: false, hasCredentials: false }
-        try {
-          const statusText = await statusRes.text()
-          if (statusText.startsWith('{')) {
-            statusData = JSON.parse(statusText)
-          }
-        } catch {
-          // Status check failed, assume not connected
-        }
-
-        if (!statusData.hasCredentials) {
-          // Groww not connected — inform user but continue with local execution
-          toast.warning('Groww not connected', {
-            description: 'Connect your Groww account in Setup tab to execute trades on the broker',
-            duration: 6000,
-          })
-        } else if (!statusData.connected) {
-          // Has credentials but NOT connected — likely auth error (expired token, IP issue, etc.)
-          const statusError = statusData.error || ''
-          if (statusError.includes('IP_NOT_REGISTERED')) {
-            toast.error('🔒 IP Not Registered on Groww', {
-              description: statusData.hint || 'Register this server IP in Groww API Dashboard, then regenerate access token.',
-              duration: 12000,
-            })
-          } else if (statusError.includes('AUTHORISATION_FAILED') || statusError.includes('Access denied')) {
-            toast.error('🚫 Groww Authorisation Failed (403)', {
-              description: statusData.hint || 'Your server IP is likely not registered in Groww API dashboard. Register the IP and regenerate the access token.',
-              duration: 12000,
-            })
-          } else if (statusError.includes('AUTHENTICATION_FAILED') || statusError.includes('GA005')) {
-            toast.error('🔑 Groww Token Expired / Invalid', {
-              description: statusData.hint || 'Your access token is invalid or expired. Go to Setup → Generate / Refresh Token.',
-              duration: 12000,
-            })
-          } else if (statusError.includes('Access token not generated')) {
-            toast.warning('⚠️ Groww Access Token Missing', {
-              description: statusData.hint || 'Go to Setup → Generate / Refresh Token to create a new access token.',
-              duration: 10000,
-            })
-          } else {
-            toast.warning('Groww connection issue', {
-              description: statusData.hint || statusError || 'Check your Groww connection in the Setup tab and regenerate the access token if needed.',
-              duration: 10000,
-            })
-          }
-        } else {
-          // Groww IS connected — try executing the trade on the broker
-          const brokerRes = await fetch('/api/broker/groww', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ action: 'execute-signal', signalId: signal.id }),
-          })
-
-          let brokerData: any
-          try {
-            const text = await brokerRes.text()
-            if (text.startsWith('{')) {
-              brokerData = JSON.parse(text)
-            } else {
-              toast.error('Broker call failed', {
-                description: brokerRes.status === 502 || brokerRes.status === 504
-                  ? 'Gateway timeout — the broker API took too long.'
-                  : `Server error (${brokerRes.status})`,
-              })
-            }
-          } catch {
-            toast.error('Broker call failed', { description: 'Invalid server response' })
-          }
-
-          if (brokerData) {
-            if (brokerData.success) {
-              brokerOrderId = brokerData.order?.id
-              brokerSucceeded = true
-              toast.success(`🚀 Groww order placed: ${signal.action} ${signal.symbol}`)
-            } else if (brokerData.error === 'IP_NOT_REGISTERED') {
-              toast.error('🔒 IP Not Registered on Groww', {
-                description: brokerData.hint || 'Register this server IP in Groww API Dashboard, then regenerate access token.',
-                duration: 12000,
-              })
-            } else if (brokerData.error === 'AUTHORISATION_FAILED') {
-              toast.error('🚫 Groww Authorisation Failed (403)', {
-                description: brokerData.hint || 'Your server IP is likely not registered in Groww API dashboard. Register the IP and regenerate the access token.',
-                duration: 12000,
-              })
-            } else if (brokerData.error === 'AUTHENTICATION_FAILED') {
-              toast.error('🔑 Groww Token Expired / Invalid', {
-                description: brokerData.hint || 'Your access token is invalid or expired. Go to Setup → Generate / Refresh Token.',
-                duration: 12000,
-              })
-            } else if (brokerData.error === 'Not connected') {
-              toast.warning('Groww not connected', {
-                description: 'Connect your Groww account in Setup tab to execute trades on the broker',
-                duration: 6000,
-              })
-            } else if (brokerData.error === 'INSUFFICIENT_MARGIN') {
-              toast.error('💰 Insufficient Margin', {
-                description: brokerData.hint || 'Add funds or reduce the quantity.',
-                duration: 10000,
-              })
-            } else if (brokerData.error) {
-              toast.error('Broker Error', { description: brokerData.hint || brokerData.error, duration: 10000 })
-            }
-          }
-        }
-      } catch {
-        // Broker status check or execution failed — inform user and continue with local execution
-        toast.warning('Groww not connected', {
-          description: 'Connect your Groww account in Setup tab to execute trades on the broker',
-          duration: 6000,
-        })
-      }
-
-      // ALWAYS update local signal status and create position, regardless of broker result
       const res = await fetch(`/api/signals/${signal.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
@@ -317,14 +197,7 @@ export function AISignalCard({ signal, onExecute, onSignalClick }: AISignalCardP
             signalId: signal.id
           })
         })
-        if (brokerSucceeded) {
-          toast.success(`${signal.action} ${signal.symbol} executed at ₹${signal.entryPrice.toLocaleString('en-IN')} → Groww`)
-        } else {
-          toast.success(`${signal.action} ${signal.symbol} executed locally at ₹${signal.entryPrice.toLocaleString('en-IN')}`, {
-            description: brokerOrderId ? '' : 'Signal marked as executed. Connect Groww to place real broker orders.',
-            duration: 5000,
-          })
-        }
+        toast.success(`${signal.action} ${signal.symbol} executed at ₹${signal.entryPrice.toLocaleString('en-IN')}`)
         if (onExecute) onExecute(signal)
       } else {
         toast.error('Failed to execute trade. Please try again.')

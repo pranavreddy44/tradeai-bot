@@ -3,7 +3,7 @@ import type { NewsItem } from '@prisma/client';
 import { db } from '@/lib/db';
 import { searchMarketNews, analyzeNewsSentiment } from '@/lib/ai-engine';
 import { inferTradeType, parseSourceTimestamp } from '@/lib/trade-classification';
-import { getGrowwLivePrice } from '@/lib/broker/live-prices';
+import { getLivePrice } from '@/lib/broker/live-prices';
 import { evaluateTradeQuality, formatTradeQualityReason } from '@/lib/trade-quality';
 
 // POST /api/news/auto-scan - Automated news scan for AI trading engine
@@ -87,9 +87,9 @@ export async function POST() {
 
             for (const symbol of allSymbols.slice(0, 2)) {
               try {
-                const livePrice = await getGrowwLivePrice(symbol);
+                const livePrice = await getLivePrice(symbol);
                 if (!livePrice || livePrice <= 0) {
-                  console.log(`[NewsAutoScan] Skipped ${symbol}: no verified live Groww price available`);
+                  console.log(`[NewsAutoScan] Skipped ${symbol}: no verified live price available`);
                   continue;
                 }
 

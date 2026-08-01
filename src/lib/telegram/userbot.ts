@@ -259,7 +259,7 @@ async function processTextSignal(
   try {
     const { buildTrustedTelegramCandidate, parseTelegramSignal } = await import('@/lib/ai-engine');
     const { db } = await import('@/lib/db');
-    const { getGrowwLivePrice, normalizeSignalWithLivePrice } = await import('@/lib/broker/live-prices');
+    const { getLivePrice, normalizeSignalWithLivePrice } = await import('@/lib/broker/live-prices');
     const { inferTradeType, parseSourceTimestamp } = await import('@/lib/trade-classification');
     const { resolveInstrumentFromText } = await import('@/lib/market/instrument-resolver');
 
@@ -268,12 +268,12 @@ async function processTextSignal(
       const resolvedInstrument = await resolveInstrumentFromText(text).catch(() => null);
       const preliminary = buildTrustedTelegramCandidate(text, null, resolvedInstrument?.symbol);
       const symbol = preliminary.signal?.symbol || resolvedInstrument?.symbol || null;
-      const livePrice = symbol ? await getGrowwLivePrice(symbol) : null;
+      const livePrice = symbol ? await getLivePrice(symbol) : null;
       const recovered = buildTrustedTelegramCandidate(text, livePrice, resolvedInstrument?.symbol);
       if (recovered.isValid) {
         result = {
           ...recovered,
-          reasoning: `${recovered.reasoning} ${resolvedInstrument ? `Resolved via Groww instruments (${resolvedInstrument.matchType}: ${resolvedInstrument.name}).` : ''} Recovered from AI rejection: ${result.reasoning || 'not provided'}`,
+          reasoning: `${recovered.reasoning} ${resolvedInstrument ? `Resolved via instrument list (${resolvedInstrument.matchType}: ${resolvedInstrument.name}).` : ''} Recovered from AI rejection: ${result.reasoning || 'not provided'}`,
         };
       }
     }

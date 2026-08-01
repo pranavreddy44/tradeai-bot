@@ -1,5 +1,3 @@
-import { GROWW_CONSTANTS } from '@/lib/broker/groww-client';
-
 export type ResolvedInstrument = {
   symbol: string;
   name: string;
@@ -76,29 +74,30 @@ function parseCsvLine(line: string): string[] {
   return values;
 }
 
+const INSTRUMENT_CSV_URL = 'https://archives.nseindia.com/content/equities/EQUITY_L.csv';
+
 async function loadInstruments(): Promise<InstrumentRow[]> {
   const now = Date.now();
   if (instrumentCache && now - cacheLoadedAt < CACHE_TTL_MS) return instrumentCache;
 
-  const response = await fetch(GROWW_CONSTANTS.INSTRUMENT_CSV_URL, {
-    headers: { Accept: 'text/csv,*/*' },
+  const response = await fetch(INSTRUMENT_CSV_URL, {
+    headers: { Accept: 'text/csv,*/*', 'User-Agent': 'Mozilla/5.0' },
     signal: AbortSignal.timeout(12_000),
   });
-  if (!response.ok) throw new Error(`Groww instrument CSV failed: HTTP ${response.status}`);
+  if (!response.ok) throw new Error(`NSE instrument CSV failed: HTTP ${response.status}`);
 
   const csv = await response.text();
   const lines = csv.split(/\r?\n/).filter(Boolean);
-  const headers = parseCsvLine(lines[0]);
-  const index = Object.fromEntries(headers.map((header, i) => [header, i]));
 
+  // NSE EQUITY_L.csv layout: Symbol, Name of Company, Series, Date of Listing, Paid Up Value, Market Lot, ISIN Number, Face Value
   instrumentCache = lines.slice(1)
     .map((line) => {
       const cols = parseCsvLine(line);
       return {
-        exchange: cols[index.exchange] || '',
-        trading_symbol: cols[index.trading_symbol] || '',
-        name: cols[index.name] || '',
-        segment: cols[index.segment] || '',
+        exchange: 'NSE',
+        trading_symbol: (cols[0] || '').trim().toUpperCase(),
+        name: (cols[1] || '').trim(),
+        segment: (cols[2] || '').trim().toUpperCase() === 'EQ' ? 'CASH' : '',
       };
     })
     .filter((row) =>

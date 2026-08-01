@@ -10,7 +10,7 @@ import { db } from '@/lib/db';
 import { batchParseTelegramSignals, buildTrustedTelegramCandidate, ruleBasedBatchParseTelegramSignals, resetRateLimit, NSE_SYMBOLS, COMPANY_ALIASES, containsSymbol, containsAlias } from '@/lib/ai-engine';
 import { inferTradeType, parseSourceTimestamp } from '@/lib/trade-classification';
 import { evaluateTradeQuality, formatTradeQualityReason } from '@/lib/trade-quality';
-import { getGrowwLivePrice } from '@/lib/broker/live-prices';
+import { getLivePrice } from '@/lib/broker/live-prices';
 import { resolveInstrumentFromText } from '@/lib/market/instrument-resolver';
 import { getSourceConfidenceMultiplier } from '@/lib/signals/source-performance';
 
@@ -107,7 +107,7 @@ async function recoverTrustedTelegramResult(
   const resolvedInstrument = await resolveInstrumentFromText(msgInfo.text).catch(() => null);
   const preliminary = buildTrustedTelegramCandidate(msgInfo.text, null, resolvedInstrument?.symbol);
   const symbol = preliminary.signal?.symbol || resolvedInstrument?.symbol || null;
-  const livePrice = symbol ? await getGrowwLivePrice(symbol) : null;
+  const livePrice = symbol ? await getLivePrice(symbol) : null;
 
   const recovered = buildTrustedTelegramCandidate(msgInfo.text, livePrice, resolvedInstrument?.symbol);
   if (!recovered.isValid || !recovered.signal) return result;
@@ -117,7 +117,7 @@ async function recoverTrustedTelegramResult(
     isValid: true,
     signal: recovered.signal,
     signals: [recovered.signal],
-    reasoning: `${recovered.reasoning} ${resolvedInstrument ? `Resolved via Groww instruments (${resolvedInstrument.matchType}: ${resolvedInstrument.name}).` : ''} Recovered from AI rejection: ${result.reasoning || 'not provided'}`,
+    reasoning: `${recovered.reasoning} ${resolvedInstrument ? `Resolved via instrument list (${resolvedInstrument.matchType}: ${resolvedInstrument.name}).` : ''} Recovered from AI rejection: ${result.reasoning || 'not provided'}`,
   };
 }
 

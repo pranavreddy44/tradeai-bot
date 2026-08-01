@@ -469,7 +469,7 @@ function OnboardingCard({ onStartBot }: { onStartBot: () => void }) {
                 <div className="h-5 w-5 rounded-full bg-emerald-500/10 flex items-center justify-center shrink-0">
                   <Wifi className="h-3 w-3 text-emerald-400" />
                 </div>
-                <span>Connect your Groww account in Setup</span>
+                <span>Scan Telegram channels to generate signals</span>
               </div>
               <div className="flex items-center gap-2 text-xs">
                 <div className="h-5 w-5 rounded-full bg-emerald-500/10 flex items-center justify-center shrink-0">

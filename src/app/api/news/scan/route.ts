@@ -9,7 +9,7 @@ import {
   type AISignalOutput,
   type SentimentResult,
 } from '@/lib/ai-engine';
-import { normalizeSignalWithLivePrice, getGrowwLivePrice } from '@/lib/broker/live-prices';
+import { normalizeSignalWithLivePrice, getLivePrice } from '@/lib/broker/live-prices';
 import { inferTradeType, parseSourceTimestamp } from '@/lib/trade-classification';
 import type { SearchFunctionResultItem } from 'z-ai-web-dev-sdk';
 
@@ -340,7 +340,7 @@ async function maybeCreateSignalFromNews(
   });
   if (recentDuplicate) return false;
 
-  const livePrice = await getGrowwLivePrice(symbol);
+  const livePrice = await getLivePrice(symbol);
   if (!livePrice || livePrice <= 0) {
     console.warn(`[News Scan] Skipping ${symbol} (resolved from ${rawSymbol}) signal because live price was unavailable`);
     return false;

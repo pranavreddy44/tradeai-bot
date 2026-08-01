@@ -304,88 +304,6 @@ function TelegramStatusBadge() {
   )
 }
 
-// ─── Groww Broker Status Badge ──────────────────────────────
-
-function GrowwStatusBadge() {
-  const [status, setStatus] = useState<{
-    connected: boolean
-    hasCredentials: boolean
-    accessTokenValid?: boolean
-    margin?: { clearCash: number; netMarginUsed: number; collateralAvailable: number }
-    error?: string
-    authMethod?: string
-  } | null>(null)
-
-  useEffect(() => {
-    const poll = async () => {
-      try {
-        const res = await fetch('/api/broker/groww?action=status')
-        if (res.ok) {
-          const data = await res.json()
-          setStatus(data)
-        }
-      } catch {
-        // not configured
-      }
-    }
-    poll()
-    const interval = setInterval(poll, 15000)
-    return () => clearInterval(interval)
-  }, [])
-
-  if (!status || !status.hasCredentials) {
-    return (
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <Badge variant="outline" className="text-[10px] gap-1 px-2 py-0.5 cursor-default">
-            <BarChart3 className="w-3 h-3 text-muted-foreground" />
-            <span className="text-muted-foreground">Groww</span>
-          </Badge>
-        </TooltipTrigger>
-        <TooltipContent>Groww broker not connected</TooltipContent>
-      </Tooltip>
-    )
-  }
-
-  if (status.connected && status.accessTokenValid) {
-    return (
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <Badge className="text-[10px] gap-1 px-2 py-0.5 bg-emerald-500/15 text-emerald-500 border-emerald-500/20 cursor-default">
-            <BarChart3 className="w-3 h-3" />
-            <span>Groww{status.margin ? ` · ₹${(status.margin.clearCash / 1000).toFixed(1)}k` : ''}</span>
-          </Badge>
-        </TooltipTrigger>
-        <TooltipContent>
-          <p>Groww Connected</p>
-          {status.margin && (
-            <>
-              <p className="text-xs text-muted-foreground">Cash: ₹{status.margin.clearCash.toLocaleString('en-IN')}</p>
-              <p className="text-xs text-muted-foreground">Margin Used: ₹{status.margin.netMarginUsed.toLocaleString('en-IN')}</p>
-            </>
-          )}
-          <p className="text-xs text-muted-foreground">Auth: {status.authMethod}</p>
-        </TooltipContent>
-      </Tooltip>
-    )
-  }
-
-  // Has credentials but not connected
-  return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <Badge className="text-[10px] gap-1 px-2 py-0.5 bg-amber-500/15 text-amber-500 border-amber-500/20 cursor-default">
-          <BarChart3 className="w-3 h-3" />
-          <span>Groww Auth</span>
-        </Badge>
-      </TooltipTrigger>
-      <TooltipContent>
-        <p className="text-amber-400">Groww: Needs Authentication</p>
-        <p className="text-xs text-muted-foreground">{status.error || 'Generate access token to connect'}</p>
-      </TooltipContent>
-    </Tooltip>
-  )
-}
 
 export function TradingDashboard() {
   const {
@@ -935,16 +853,6 @@ export function TradingDashboard() {
                 <p>Telegram Userbot connection status</p>
               </TooltipContent>
             </Tooltip>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <div>
-                  <GrowwStatusBadge />
-                </div>
-              </TooltipTrigger>
-              <TooltipContent side="bottom" className="bg-card text-card-foreground border-border">
-                <p>Groww broker connection status</p>
-              </TooltipContent>
-            </Tooltip>
             <div className="w-px h-5 bg-border" />
             <NotificationCenter />
             <Tooltip>
@@ -1237,30 +1145,6 @@ export function TradingDashboard() {
                     {/* Telegram Integration Section */}
                     <TelegramSetupGuide />
 
-                    <SectionDivider />
-
-                    {/* Groww Broker Status */}
-                    <Card className="border-emerald-500/20 overflow-hidden rounded-xl shadow-sm shadow-black/10">
-                      <CardHeader className="pb-2 px-4 pt-3">
-                        <CardTitle className="text-xs flex items-center gap-2">
-                          <BarChart3 className="h-3.5 w-3.5 text-emerald-500" />
-                          Groww Broker
-                          <Badge variant="secondary" className="text-[10px] px-1.5 py-0 bg-emerald-500/15 text-emerald-400 ml-1">API</Badge>
-                        </CardTitle>
-                      </CardHeader>
-                      <CardContent className="px-4 pb-3">
-                        <p className="text-[10px] text-muted-foreground mb-2">Connect your Groww account in Settings for automated trading</p>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="h-7 text-[10px] gap-1 border-emerald-600/30 text-emerald-400 hover:bg-emerald-950/30 hover:text-emerald-300"
-                          onClick={() => setActiveTab('settings')}
-                        >
-                          <BarChart3 className="h-3 w-3" />
-                          Go to Settings
-                        </Button>
-                      </CardContent>
-                    </Card>
 
                     <SectionDivider />
 

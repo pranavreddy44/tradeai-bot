@@ -95,7 +95,7 @@ export async function POST(request: NextRequest) {
     // Import momentum filter and source confidence weighting
     const { detectMomentumEvent, extractSymbolsFromNewsText } = await import('@/lib/news/momentum-filter');
     const { getSourceConfidenceMultiplier } = await import('@/lib/signals/source-performance');
-    const { getGrowwLivePrice } = await import('@/lib/broker/live-prices');
+    const { getLivePrice } = await import('@/lib/broker/live-prices');
 
     // Step 2: Analyze and save each news item
     const savedItems: NewsItem[] = [];
@@ -148,7 +148,7 @@ export async function POST(request: NextRequest) {
           for (const symbol of allSymbols.slice(0, 3)) {
             try {
               // Get live price for entry
-              const livePrice = await getGrowwLivePrice(symbol);
+              const livePrice = await getLivePrice(symbol);
               if (!livePrice || livePrice <= 0) continue;
 
               // Compute confidence: base 55 + momentum boost + source multiplier

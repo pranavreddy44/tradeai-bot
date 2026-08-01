@@ -34,7 +34,6 @@ const defaultSettings: Settings = {
   maxDailyTrades: 10,
   stopLossDefault: 2,
   riskPerTrade: 2,
-  broker: 'groww',
   telegramChannels: [
     { id: '1', name: 'StockPro India', channelId: '@stockproindia', active: true },
     { id: '2', name: 'Nifty Trader', channelId: '@niftytrader', active: true },
