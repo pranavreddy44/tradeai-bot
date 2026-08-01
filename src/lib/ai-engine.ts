@@ -1137,7 +1137,7 @@ ${telegramText}` : ''}
     ], {
       temperature: 0.2,
       maxTokens: 1800,
-      timeoutMs: 20_000,
+      timeoutMs: 60_000,
       jsonMode: true,
     });
 
@@ -1380,7 +1380,7 @@ export async function batchParseTelegramSignals(
         ], {
           temperature: 0.1,
           maxTokens: 2200,
-          timeoutMs: 15_000,
+          timeoutMs: 90_000,
           jsonMode: true,
         });
 
@@ -1516,7 +1516,7 @@ export async function parseTelegramSignal(
       temperature: 0.1,
       maxTokens: 800,
       jsonMode: true,
-      timeoutMs: 10_000,
+      timeoutMs: 45_000,
     });
 
     const content = completion.content;
@@ -2738,7 +2738,7 @@ export async function analyzeNewsSentiment(
     ], {
       temperature: 0.1,
       maxTokens: 700,
-      timeoutMs: 10_000,
+      timeoutMs: 45_000,
       jsonMode: true,
     });
 
