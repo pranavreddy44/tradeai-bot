@@ -47,15 +47,144 @@ import { toast } from 'sonner'
 
 // ─── Telegram Channels Card ────────────────────────────────
 
+// ─── Per-Task Model Stacks Editor ────────────────────────────
+
+type EditableStack = {
+  primary: string
+  fallbacks: string
+  anchor: string
+}
+
+const TASK_LABELS: Record<string, string> = {
+  telegramParse: 'Telegram Signal Parse',
+  visionParse: 'Vision (Chart) Parse',
+  qualityGate: 'Quality Gate',
+}
+
+function TaskStacksEditor({ onSave }: { onSave: (stacks: Record<string, any>) => Promise<boolean> }) {
+  const [stacks, setStacks] = useState<Record<string, EditableStack> | null>(null)
+  const [saving, setSaving] = useState(false)
+  const [expanded, setExpanded] = useState(false)
+
+  const load = useCallback(async () => {
+    try {
+      const res = await fetch('/api/ai/task-stacks')
+      const data = await res.json()
+      if (res.ok && data.stacks) {
+        const editable: Record<string, EditableStack> = {}
+        for (const [task, s] of Object.entries(data.stacks as Record<string, any>)) {
+          editable[task] = {
+            primary: s.primary || '',
+            fallbacks: (s.fallbacks || []).join(', '),
+            anchor: s.anchor || 'rules',
+          }
+        }
+        setStacks(editable)
+      }
+    } catch {
+      // leave null — editor hides
+    }
+  }, [])
+
+  useEffect(() => {
+    load()
+  }, [load])
+
+  if (!stacks) return null
+
+  const save = async () => {
+    setSaving(true)
+    try {
+      const payload: Record<string, any> = {}
+      for (const [task, s] of Object.entries(stacks)) {
+        payload[task] = {
+          primary: s.primary.trim(),
+          fallbacks: s.fallbacks.split(',').map(f => f.trim()).filter(Boolean),
+          anchor: s.anchor,
+        }
+      }
+      const ok = await onSave(payload)
+      if (ok) toast.success('Per-task model stacks saved')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="rounded-lg border border-border/25 bg-muted/10">
+      <button
+        type="button"
+        onClick={() => setExpanded(e => !e)}
+        className="w-full flex items-center justify-between px-3 py-2 text-xs font-semibold"
+      >
+        <span className="flex items-center gap-1.5">
+          <Settings2 className="h-3.5 w-3.5 text-primary shrink-0" />
+          Per-Task Model Stacks
+        </span>
+        {expanded ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+      </button>
+      {expanded && (
+        <div className="px-3 pb-3 space-y-3">
+          <p className="text-[10px] text-muted-foreground">
+            Each task uses primary → fallbacks → anchor. Empty fallbacks inherit defaults.
+          </p>
+          {Object.entries(stacks).map(([task, s]) => (
+            <div key={task} className="space-y-1.5">
+              <Label className="text-[11px] font-semibold">{TASK_LABELS[task] || task}</Label>
+              <div className="grid grid-cols-1 gap-1.5">
+                <Input
+                  type="text"
+                  placeholder="primary model"
+                  value={s.primary}
+                  onChange={e => setStacks(prev => prev ? { ...prev, [task]: { ...prev[task], primary: e.target.value } } : prev)}
+                  className="h-7 text-[11px] bg-muted/10 font-mono"
+                />
+                <Input
+                  type="text"
+                  placeholder="fallbacks (comma separated)"
+                  value={s.fallbacks}
+                  onChange={e => setStacks(prev => prev ? { ...prev, [task]: { ...prev[task], fallbacks: e.target.value } } : prev)}
+                  className="h-7 text-[11px] bg-muted/10 font-mono"
+                />
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] text-muted-foreground shrink-0">Anchor:</span>
+                  <Select value={s.anchor} onValueChange={(val: any) => setStacks(prev => prev ? { ...prev, [task]: { ...prev[task], anchor: val } } : prev)}>
+                    <SelectTrigger className="h-7 text-[11px] flex-1 bg-muted/20">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="rules" className="text-xs">rules (safe parser)</SelectItem>
+                      <SelectItem value="reject" className="text-xs">reject</SelectItem>
+                      <SelectItem value="neutral" className="text-xs">neutral</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            </div>
+          ))}
+          <Button size="sm" className="h-8 text-xs w-full" onClick={save} disabled={saving}>
+            {saving ? <Loader2 className="h-3 w-3 animate-spin" /> : <CheckCircle2 className="h-3 w-3" />}
+            Save Task Stacks
+          </Button>
+        </div>
+      )}
+    </div>
+  )
+}
+
 function AIProviderCard() {
   const [provider, setProvider] = useState<'omniroute' | 'groq'>('omniroute')
   const [model, setModel] = useState('')
+  const [jsonModel, setJsonModel] = useState('')
+  const [visionModel, setVisionModel] = useState('')
   const [token, setToken] = useState('')
   const [baseUrl, setBaseUrl] = useState('')
   
   // Cache of configuration for each provider
   const [providerConfigs, setProviderConfigs] = useState<Record<string, {
     model: string
+    jsonModel?: string
+    visionModel?: string
     baseUrl?: string
     hasToken: boolean
     tokenSource: 'env' | 'settings' | 'none'
@@ -66,7 +195,9 @@ function AIProviderCard() {
   const [loading, setLoading] = useState(false)
   const [testing, setTesting] = useState(false)
   const [activeProvider, setActiveProvider] = useState<string>('')
-  const [jsonModel, setJsonModel] = useState('oc/nemotron-3-ultra-free')
+  const [catalogModels, setCatalogModels] = useState<Array<{ id: string; name: string; description: string }>>([])
+  const [catalogLoading, setCatalogLoading] = useState(false)
+  const [catalogSearch, setCatalogSearch] = useState('')
 
   const loadProvider = useCallback(async () => {
     setLoading(true)
@@ -86,6 +217,7 @@ function AIProviderCard() {
           setModel(config.model)
           if (config.baseUrl) setBaseUrl(config.baseUrl)
           if (config.jsonModel) setJsonModel(config.jsonModel)
+          if (config.visionModel) setVisionModel(config.visionModel)
         }
       }
     } catch (err: any) {
@@ -106,6 +238,8 @@ function AIProviderCard() {
     if (config) {
       setModel(config.model)
       if (config.baseUrl) setBaseUrl(config.baseUrl)
+      if (config.jsonModel) setJsonModel(config.jsonModel)
+      if (config.visionModel) setVisionModel(config.visionModel)
     }
   }
 
@@ -121,6 +255,7 @@ function AIProviderCard() {
           token: token.trim(),
           baseUrl: baseUrl.trim(),
           jsonModel: jsonModel.trim(),
+          visionModel: visionModel.trim(),
         }),
       })
       const data = await res.json()
@@ -152,6 +287,43 @@ function AIProviderCard() {
       toast.error('AI provider test failed', { description: err.message })
     } finally {
       setTesting(false)
+    }
+  }
+
+  const loadCatalog = async () => {
+    if (catalogModels.length > 0) return
+    setCatalogLoading(true)
+    try {
+      const res = await fetch('/api/ai/catalog')
+      const data = await res.json()
+      if (res.ok && Array.isArray(data.models)) {
+        setCatalogModels(data.models)
+      } else {
+        toast.error('Failed to load model catalog', { description: data.error || `Error ${res.status}` })
+      }
+    } catch (err: any) {
+      toast.error('Failed to load model catalog', { description: err.message })
+    } finally {
+      setCatalogLoading(false)
+    }
+  }
+
+  const saveTaskStacks = async (stacks: Record<string, any>) => {
+    try {
+      const res = await fetch('/api/ai/task-stacks', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ stacks }),
+      })
+      const data = await res.json()
+      if (!res.ok || data.error) {
+        toast.error('Task stack save failed', { description: data.error || `Error ${res.status}` })
+        return false
+      }
+      return true
+    } catch (err: any) {
+      toast.error('Task stack save failed', { description: err.message })
+      return false
     }
   }
 
@@ -315,14 +487,76 @@ function AIProviderCard() {
               </p>
             </div>
           )}
+          {provider === 'omniroute' && (
+            <div className="mt-2">
+              <Label className="text-xs flex items-center gap-1.5">
+                <Link2 className="h-3 w-3 shrink-0" /> Vision (Chart) Model
+              </Label>
+              <Input
+                type="text"
+                placeholder="gemini/gemini-3.5-flash"
+                value={visionModel}
+                onChange={e => setVisionModel(e.target.value)}
+                className="h-8 text-xs mt-1 bg-muted/10 focus-visible:bg-transparent font-mono"
+              />
+              <p className="text-[10px] text-muted-foreground mt-1">
+                Multimodal model used to read Telegram chart/image screenshots. Fallbacks come from the visionParse task stack below.
+              </p>
+            </div>
+          )}
+          {provider === 'omniroute' && (
+            <div className="mt-2">
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-8 text-xs gap-1.5 w-full"
+                onClick={loadCatalog}
+                disabled={catalogLoading}
+              >
+                {catalogLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
+                {catalogModels.length > 0 ? `${catalogModels.length} models loaded` : 'Browse All Models (live catalog)'}
+              </Button>
+              {catalogModels.length > 0 && (
+                <div className="mt-2">
+                  <Input
+                    type="text"
+                    placeholder="Search catalog models..."
+                    value={catalogSearch}
+                    onChange={e => setCatalogSearch(e.target.value)}
+                    className="h-8 text-xs mb-2 bg-muted/10 focus-visible:bg-transparent font-mono"
+                  />
+                  <div className="max-h-48 overflow-y-auto rounded-lg border border-border/20 bg-muted/5 custom-scrollbar">
+                    {catalogModels
+                      .filter(m => m.id.toLowerCase().includes(catalogSearch.toLowerCase()))
+                      .slice(0, 100)
+                      .map(m => (
+                        <button
+                          key={m.id}
+                          type="button"
+                          onClick={() => { setModel(m.id); setCatalogSearch('') }}
+                          className={`w-full text-left px-2.5 py-1.5 text-[11px] border-b border-border/10 last:border-0 hover:bg-muted/20 transition-colors ${
+                            model === m.id ? 'text-primary font-medium' : 'text-muted-foreground'
+                          }`}
+                        >
+                          {m.id}
+                        </button>
+                      ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
         </div>
+
+        {/* Per-Task Model Stacks */}
+        {provider === 'omniroute' && <TaskStacksEditor onSave={saveTaskStacks} />}
 
         <div className="grid grid-cols-2 gap-2">
           <Button size="sm" className="h-8 text-xs gap-1.5" onClick={saveProvider} disabled={loading}>
             {loading ? <Loader2 className="h-3 w-3 animate-spin" /> : <CheckCircle2 className="h-3 w-3" />}
             Save &amp; Activate
           </Button>
-          <Button size="sm" variant="outline" className="h-8 text-xs gap-1.5" onClick={testProvider} disabled={testing || !isActive || !hasToken}>
+          <Button size="sm" variant="outline" className="h-8 text-xs gap-1.5" onClick={testProvider} disabled={testing || !isActive || (provider === 'groq' && !hasToken)}>
             {testing ? <Loader2 className="h-3 w-3 animate-spin" /> : <TestTube className="h-3 w-3" />}
             Test Config
           </Button>

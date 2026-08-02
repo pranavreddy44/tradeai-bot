@@ -361,7 +361,7 @@ export interface TaskModelStack {
   anchor: TaskAnchor;
 }
 
-export const TASK_MODEL_STACKS: Record<string, TaskModelStack> = {
+const DEFAULT_TASK_MODEL_STACKS: Record<string, TaskModelStack> = {
   telegramParse: {
     primary: 'mistral/mistral-medium-3-5',
     fallbacks: ['groq/openai/gpt-oss-120b', 'groq/llama-3.3-70b-versatile'],
@@ -379,8 +379,68 @@ export const TASK_MODEL_STACKS: Record<string, TaskModelStack> = {
   },
 };
 
-export function getTaskModelStack(task: string): TaskModelStack | undefined {
-  return TASK_MODEL_STACKS[task];
+// Optional per-task overrides persisted in botSettings under `taskModelStacks`
+// as a JSON object: { [task]: { primary, fallbacks[], anchor } }. Missing
+// tasks/fields fall back to DEFAULT_TASK_MODEL_STACKS. Read fresh on each call,
+// so UI changes apply immediately without a restart.
+
+async function getTaskStacksOverride(): Promise<Record<string, Partial<TaskModelStack>> | null> {
+  try {
+    const value = await getBotSetting('taskModelStacks');
+    if (!value) return null;
+    const parsed = JSON.parse(value);
+    return parsed && typeof parsed === 'object' ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+export async function getTaskModelStack(task: string): Promise<TaskModelStack | undefined> {
+  const override = await getTaskStacksOverride();
+  const overrideEntry = override?.[task];
+  const defaults = DEFAULT_TASK_MODEL_STACKS[task];
+  if (overrideEntry && (overrideEntry.primary || (overrideEntry.fallbacks?.length ?? 0) > 0)) {
+    return {
+      primary: overrideEntry.primary || defaults?.primary || '',
+      fallbacks: overrideEntry.fallbacks && overrideEntry.fallbacks.length > 0
+        ? overrideEntry.fallbacks
+        : (defaults?.fallbacks || []),
+      anchor: (overrideEntry.anchor as TaskAnchor) || defaults?.anchor || 'neutral',
+    };
+  }
+  return defaults;
+}
+
+export async function getAllTaskModelStacks(): Promise<Record<string, TaskModelStack>> {
+  const override = await getTaskStacksOverride();
+  const stacks: Record<string, TaskModelStack> = {};
+  for (const [task, defaults] of Object.entries(DEFAULT_TASK_MODEL_STACKS)) {
+    const overrideEntry = override?.[task];
+    stacks[task] = {
+      primary: overrideEntry?.primary || defaults.primary,
+      fallbacks: overrideEntry?.fallbacks && overrideEntry.fallbacks.length > 0
+        ? overrideEntry.fallbacks
+        : defaults.fallbacks,
+      anchor: (overrideEntry?.anchor as TaskAnchor) || defaults.anchor,
+    };
+  }
+  return stacks;
+}
+
+export async function saveTaskModelStacks(stacks: Record<string, Partial<TaskModelStack>>): Promise<void> {
+  await db.botSetting.upsert({
+    where: { key: 'taskModelStacks' },
+    create: { key: 'taskModelStacks', value: JSON.stringify(stacks) },
+    update: { value: JSON.stringify(stacks) },
+  });
+}
+
+export async function clearTaskModelStacks(): Promise<void> {
+  try {
+    await db.botSetting.delete({ where: { key: 'taskModelStacks' } });
+  } catch {
+    // not present — no-op
+  }
 }
 
 export interface ConfiguredAIProvider {
@@ -563,7 +623,7 @@ export async function callConfiguredChatCompletionWithTask(
   messages: ChatMessage[],
   options: ChatCompletionOptions = {}
 ): Promise<{ content: string; model: string }> {
-  const stack = getTaskModelStack(task);
+  const stack = await getTaskModelStack(task);
   if (!stack) {
     return callConfiguredChatCompletion(messages, options);
   }
@@ -2153,7 +2213,7 @@ export async function callConfiguredVisionParser(
 
   // Build the vision model chain from the visionParse task stack. The configured
   // vision model (env/setting) wins as primary, then the stack fallbacks apply.
-  const stack = getTaskModelStack('visionParse');
+  const stack = await getTaskModelStack('visionParse');
   const configuredVisionModel = process.env.OMNIROUTE_VISION_MODEL
     || await getBotSetting('omniRouteVisionModel')
     || (stack?.primary || 'oc/mimo-v2.5-free');

@@ -40,6 +40,7 @@ export async function GET() {
     // Active model for each provider
     const omniRouteModel = await getSettingValue('omniRouteModel') || DEFAULT_OMNIROUTE_MODEL;
     const omniRouteJsonModel = await getSettingValue('omniRouteJsonModel') || 'oc/nemotron-3-ultra-free';
+    const omniRouteVisionModel = await getSettingValue('omniRouteVisionModel') || 'gemini/gemini-3.5-flash';
     const groqModel = await getSettingValue('groqModel') || 'llama-3.3-70b-versatile';
 
     return NextResponse.json({
@@ -51,6 +52,7 @@ export async function GET() {
         omniroute: {
           model: omniRouteModel,
           jsonModel: omniRouteJsonModel,
+          visionModel: omniRouteVisionModel,
           baseUrl: omniRouteBaseUrl,
           hasToken: Boolean(omniRouteToken),
           tokenSource: omniRouteEnvToken ? 'env' : (omniRouteSettingsToken ? 'settings' : 'none'),
@@ -81,6 +83,7 @@ export async function PUT(request: NextRequest) {
     const provider = typeof body.provider === 'string' ? body.provider.trim() : 'omniroute';
     const model = typeof body.model === 'string' && body.model.trim() ? body.model.trim() : '';
     const jsonModel = typeof body.jsonModel === 'string' && body.jsonModel.trim() ? body.jsonModel.trim() : '';
+    const visionModel = typeof body.visionModel === 'string' && body.visionModel.trim() ? body.visionModel.trim() : '';
     const token = typeof body.token === 'string' ? body.token.trim() : '';
     const baseUrl = typeof body.baseUrl === 'string' ? body.baseUrl.trim() : '';
 
@@ -115,6 +118,13 @@ export async function PUT(request: NextRequest) {
           where: { key: 'omniRouteJsonModel' },
           create: { key: 'omniRouteJsonModel', value: jsonModel },
           update: { value: jsonModel },
+        });
+      }
+      if (visionModel) {
+        await db.botSetting.upsert({
+          where: { key: 'omniRouteVisionModel' },
+          create: { key: 'omniRouteVisionModel', value: visionModel },
+          update: { value: visionModel },
         });
       }
       if (token && token !== 'configured') {
