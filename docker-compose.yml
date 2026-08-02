@@ -1,6 +1,37 @@
 version: '3.8'
 
 services:
+  # OmniRoute — self-hosted AI gateway (OpenAI-compatible /v1). The app talks to
+  # it via the compose-internal DNS name below, so no host networking is needed.
+  # Dashboard is bound to loopback only (127.0.0.1) — put nginx/Caddy/Cloudflare
+  # in front if you need to reach it remotely.
+  omniroute:
+    image: diegosouzapw/omniroute:3.8.49
+    container_name: omniroute
+    restart: unless-stopped
+    stop_grace_period: 40s   # let SQLite WAL checkpoint before shutdown
+    ports:
+      - "127.0.0.1:20128:20128"
+    volumes:
+      - omniroute-data:/app/data   # DB + provider keys + config persist here
+    environment:
+      - PORT=20128
+      - HOSTNAME=0.0.0.0
+      - DATA_DIR=/app/data
+      # Internal server-to-server URL (compose DNS) for scheduled jobs/self-fetches
+      - BASE_URL=http://omniroute:20128
+      # Browser-facing origin for OAuth callbacks / dashboard links
+      - NEXT_PUBLIC_BASE_URL=${OMNIROUTE_PUBLIC_URL:-http://localhost:20128}
+      # REQUIRED in production — generate with: openssl rand -hex 32
+      - OMNIROUTE_WS_BRIDGE_SECRET=${OMNIROUTE_WS_BRIDGE_SECRET:-}
+      - INITIAL_PASSWORD=${OMNIROUTE_INITIAL_PASSWORD:-CHANGE_ME}
+      - JWT_SECRET=${OMNIROUTE_JWT_SECRET:-}
+      - API_KEY_SECRET=${OMNIROUTE_API_KEY_SECRET:-}
+      - STORAGE_ENCRYPTION_KEY=${OMNIROUTE_STORAGE_ENCRYPTION_KEY:-}
+      - MACHINE_ID_SALT=${OMNIROUTE_MACHINE_ID_SALT:-}
+      - AUTH_COOKIE_SECURE=${OMNIROUTE_AUTH_COOKIE_SECURE:-false}
+      - REQUIRE_API_KEY=${OMNIROUTE_REQUIRE_API_KEY:-false}
+
   app:
     build: .
     ports:
@@ -11,8 +42,22 @@ services:
     environment:
       - NODE_ENV=production
       - DATABASE_URL=file:/app/db/dev.db
-      # Populate Groq, Telegram APIs or other secrets in your deploy environment
+      # Reach OmniRoute by compose DNS name — NOT localhost (localhost would be
+      # this container itself and AI calls would fail). Overrides .env for Docker.
+      - OMNIROUTE_BASE_URL=http://omniroute:20128/v1/chat/completions
+      - OMNIROUTE_KEY=${OMNIROUTE_KEY:-}
+      - OMNIROUTE_MODEL=${OMNIROUTE_MODEL:-auto}
+      - OMNIROUTE_JSON_MODEL=${OMNIROUTE_JSON_MODEL:-oc/nemotron-3-ultra-free}
+      - OMNIROUTE_VISION_MODEL=${OMNIROUTE_VISION_MODEL:-oc/mimo-v2.5-free}
+      # Groq fallback provider
+      - GROQ_API_KEY=${GROQ_API_KEY:-}
+      - GROQ_MODEL=${GROQ_MODEL:-}
+      # Protects the wipe-all /api/seed endpoint
+      - SEED_CONFIRM_TOKEN=${SEED_CONFIRM_TOKEN:-}
+    depends_on:
+      - omniroute
     restart: always
 
 volumes:
   app-db:
+  omniroute-data:
