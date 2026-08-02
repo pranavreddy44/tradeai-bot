@@ -1,10 +1,27 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import type { BotSetting, NewsItem, Position, TelegramChannel, TradeSignal, WatchlistItem } from '@prisma/client';
 import { db } from '@/lib/db';
 
 // POST /api/seed - Seed the database with realistic Indian market sample data
-export async function POST() {
+export async function POST(request: NextRequest) {
   try {
+    // Safety guard: this endpoint DELETES all data, so it must be explicitly
+    // confirmed. Optionally set SEED_CONFIRM_TOKEN to require a matching token.
+    const { searchParams } = new URL(request.url);
+    if (searchParams.get('confirm') !== 'true') {
+      return NextResponse.json(
+        { error: 'Refusing to seed: pass ?confirm=true to acknowledge that all existing data will be deleted.' },
+        { status: 400 }
+      );
+    }
+    const expectedToken = process.env.SEED_CONFIRM_TOKEN;
+    if (expectedToken && searchParams.get('token') !== expectedToken) {
+      return NextResponse.json(
+        { error: 'Refusing to seed: missing or invalid token (SEED_CONFIRM_TOKEN is set).' },
+        { status: 403 }
+      );
+    }
+
     // Clean existing data (order matters due to relations)
     await db.position.deleteMany();
     await db.tradeSignal.deleteMany();

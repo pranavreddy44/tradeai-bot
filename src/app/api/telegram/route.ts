@@ -20,6 +20,9 @@ const TELEGRAM_AI_SELECTION_PERCENT = 0.6;
 export const maxDuration = 60;
 const TELEGRAM_AI_MAX_MESSAGES = 60;
 
+// Module-level in-flight guard for scan-messages (see the case handler below).
+let scanInFlight = false;
+
 type ScoredTelegramMessage = {
   text: string;
   channelId: string;
@@ -434,6 +437,19 @@ export async function POST(request: NextRequest) {
 
       // ─── Scan Messages (with AI + rule-based fallback) ───
       case 'scan-messages': {
+        // Server-side in-flight guard: the client's isScanning flag is not
+        // enough (two tabs / auto-scan + manual scan can overlap). Overlapping
+        // scans can double-create signals and hammer the SQLite single-writer.
+        if (scanInFlight) {
+          return NextResponse.json(
+            { error: 'A scan is already in progress. Wait for it to finish before starting another.' },
+            { status: 409 }
+          );
+        }
+        scanInFlight = true;
+
+        try {
+          return await (async () => {
 
         // Get all active channels
         const channels = await db.telegramChannel.findMany({
@@ -836,10 +852,12 @@ export async function POST(request: NextRequest) {
           parseErrors = selectedMessages.length;
         }
 
-        // Auto-dedup after scan — remove remaining duplicate signals
+        // Auto-dedup after scan — remove remaining duplicate signals, but only
+        // for telegram-sourced signals so signals from news/technical/manual
+        // sources are never deleted by a telegram scan.
         try {
           const pendingSignals = await db.tradeSignal.findMany({
-            where: { status: 'pending' },
+            where: { status: 'pending', source: 'telegram' },
             orderBy: { createdAt: 'desc' },
           });
           const seen = new Map<string, string>();
@@ -871,6 +889,10 @@ export async function POST(request: NextRequest) {
           eligibleMessages: eligibleMessages.length,
           parseErrors,
         });
+          })();
+        } finally {
+          scanInFlight = false;
+        }
       }
 
       default:

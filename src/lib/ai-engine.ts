@@ -399,7 +399,12 @@ export async function getTaskModelStack(task: string): Promise<TaskModelStack | 
   const override = await getTaskStacksOverride();
   const overrideEntry = override?.[task];
   const defaults = DEFAULT_TASK_MODEL_STACKS[task];
-  if (overrideEntry && (overrideEntry.primary || (overrideEntry.fallbacks?.length ?? 0) > 0)) {
+  const hasOverride = !!overrideEntry && (
+    (overrideEntry.primary && overrideEntry.primary.length > 0) ||
+    (overrideEntry.fallbacks?.length ?? 0) > 0 ||
+    !!overrideEntry.anchor
+  );
+  if (hasOverride) {
     return {
       primary: overrideEntry.primary || defaults?.primary || '',
       fallbacks: overrideEntry.fallbacks && overrideEntry.fallbacks.length > 0
@@ -433,6 +438,7 @@ export async function saveTaskModelStacks(stacks: Record<string, Partial<TaskMod
     create: { key: 'taskModelStacks', value: JSON.stringify(stacks) },
     update: { value: JSON.stringify(stacks) },
   });
+  invalidateBotSettingCache();
 }
 
 export async function clearTaskModelStacks(): Promise<void> {
@@ -441,6 +447,7 @@ export async function clearTaskModelStacks(): Promise<void> {
   } catch {
     // not present — no-op
   }
+  invalidateBotSettingCache();
 }
 
 export interface ConfiguredAIProvider {
@@ -450,10 +457,26 @@ export interface ConfiguredAIProvider {
   tokenSource: 'env' | 'settings' | 'none';
 }
 
+// Short-TTL cache for bot settings. AI tasks read settings many times per
+// request (provider + model + jsonModel + visionModel + stacks), so uncached
+// reads cost several Prisma round-trips per LLM call. Settings change rarely;
+// write routes call invalidateBotSettingCache() so UI saves apply immediately.
+const BOT_SETTING_TTL_MS = 5_000;
+const botSettingCache = new Map<string, { value: string | null; expiresAt: number }>();
+
+export function invalidateBotSettingCache(): void {
+  botSettingCache.clear();
+}
+
 async function getBotSetting(key: string): Promise<string | null> {
+  const now = Date.now();
+  const cached = botSettingCache.get(key);
+  if (cached && cached.expiresAt > now) return cached.value;
   try {
     const setting = await db.botSetting.findUnique({ where: { key } });
-    return setting?.value || null;
+    const value = setting?.value || null;
+    botSettingCache.set(key, { value, expiresAt: now + BOT_SETTING_TTL_MS });
+    return value;
   } catch {
     return null;
   }
@@ -594,16 +617,23 @@ export async function callConfiguredChatCompletion(
       return { content, model };
     } catch (err: any) {
       clearTimeout(timeout);
-      if (isRateLimitError(err) || err.message?.includes('429') || err.message?.includes('503') || err.message?.includes('500')) {
-        if (attempt < maxRetries) {
-          attempt++;
-          const backoff = Math.pow(2, attempt) * 1000 + Math.random() * 500;
-          console.warn(`[AI Engine] API failed, retrying in ${Math.round(backoff)}ms...`);
-          await new Promise((r) => setTimeout(r, backoff));
-          continue;
-        } else {
-          markLLMRateLimited();
-        }
+      const isTransient = isRateLimitError(err)
+        || err.message?.includes('429')
+        || err.message?.includes('502')
+        || err.message?.includes('503')
+        || err.message?.includes('500')
+        || err.message?.includes('timed out')
+        || err.message?.includes('aborted')
+        || err?.name === 'AbortError';
+      if (isTransient && attempt < maxRetries) {
+        attempt++;
+        const backoff = Math.pow(2, attempt) * 1000 + Math.random() * 500;
+        console.warn(`[AI Engine] API failed, retrying in ${Math.round(backoff)}ms...`);
+        await new Promise((r) => setTimeout(r, backoff));
+        continue;
+      }
+      if (isRateLimitError(err)) {
+        markLLMRateLimited();
       }
       console.error(`[AI Engine] Model ${model} failed permanently after ${attempt + 1} attempts:`, err instanceof Error ? err.message : err);
       throw err;
@@ -1200,7 +1230,7 @@ export async function qualityGateTelegramParseResult(result: TelegramParseResult
     // AI quality-gate escalation: the rule-based enrichment rejected the parse.
     // Re-verify the raw message with the qualityGate model stack (gpt-oss-120b
     // primary) before giving up — this rescues ambiguous but real signals.
-    const rechecked = await aiQualityGateRecheck(result, message).catch(() => null);
+    const rechecked = await aiQualityGateRecheck(result, message, resolvedSymbol).catch(() => null);
     if (rechecked && rechecked.isValid && (rechecked.signal || (rechecked.signals || []).length > 0)) {
       return rechecked;
     }
@@ -1282,7 +1312,8 @@ or
 
 async function aiQualityGateRecheck(
   previous: TelegramParseResult,
-  message: string
+  message: string,
+  resolvedSymbol: string | null = null
 ): Promise<TelegramParseResult | null> {
   const prior = JSON.stringify({
     isValid: previous.isValid,
@@ -1319,6 +1350,7 @@ async function aiQualityGateRecheck(
 
   const accepted: AISignalOutput[] = [];
   for (const signal of rawSignals) {
+    const isDyn = resolvedSymbol === signal.symbol.toUpperCase() || NSE_SYMBOLS.has(signal.symbol.toUpperCase());
     const enriched = enrichSignalQuality({
       ...signal,
       reasoning: rechecked.reasoning || 'Telegram signal re-verified by quality gate',
@@ -1327,7 +1359,7 @@ async function aiQualityGateRecheck(
       telegramText: message,
       minConfidence: 60,
       minRewardRisk: 1.6,
-      isDynamicallyResolved: false,
+      isDynamicallyResolved: isDyn,
     });
     if (enriched) accepted.push(enriched);
   }

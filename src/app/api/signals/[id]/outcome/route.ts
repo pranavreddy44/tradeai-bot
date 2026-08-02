@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
+import { invalidateSourceStatsCache } from '@/lib/signals/source-performance';
 
 // PATCH /api/signals/:id/outcome — record user feedback on a signal
 export async function PATCH(
@@ -31,6 +32,9 @@ export async function PATCH(
         status: outcome === 'missed' ? signal.status : 'closed',
       },
     });
+
+    // Outcomes feed the source confidence multipliers — drop the cached stats.
+    invalidateSourceStatsCache();
 
     return NextResponse.json({ success: true, signal: updated });
   } catch (err: any) {

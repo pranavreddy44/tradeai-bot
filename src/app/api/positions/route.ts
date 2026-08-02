@@ -12,7 +12,7 @@ export async function GET(request: NextRequest) {
 
     const where: Record<string, unknown> = {};
     if (status) where.status = status;
-    if (symbol) where.symbol = { contains: symbol, mode: 'insensitive' };
+    if (symbol) where.symbol = { contains: symbol.toUpperCase() };
 
     const [positions, total] = await Promise.all([
       db.position.findMany({

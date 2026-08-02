@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import type { BotSetting } from '@prisma/client';
 import { db } from '@/lib/db';
+import { invalidateBotSettingCache } from '@/lib/ai-engine';
 
 // GET /api/settings - Return all settings as key-value pairs
 // GET /api/settings?key=<key> - Return a specific setting value
@@ -63,6 +64,10 @@ export async function PUT(request: NextRequest) {
       });
       results.push(setting);
     }
+
+    // Settings changed — drop the AI engine's short-TTL cache so the next
+    // LLM call picks up the new values immediately.
+    invalidateBotSettingCache();
 
     // Return updated settings as key-value map
     const settingsMap: Record<string, string> = {};

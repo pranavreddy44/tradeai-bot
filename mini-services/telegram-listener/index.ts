@@ -163,6 +163,7 @@ async function saveSetting(key: string, value: string): Promise<void> {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ settings: { [key]: value } }),
+      signal: AbortSignal.timeout(10_000),
     });
   } catch (e) {
     log("WARN", `Failed to save setting ${key}`, {
@@ -321,6 +322,7 @@ function startMonitoring(client: TelegramClient): void {
               date: message.date ? new Date(message.date * 1000).toISOString() : new Date().toISOString(),
               createSignals: false,
             }),
+            signal: AbortSignal.timeout(15_000),
           });
           const imageResult = await imageRes.json() as {
             extractedText?: string;
@@ -354,6 +356,7 @@ function startMonitoring(client: TelegramClient): void {
                 channelId: chatIdStr || chatUsername,
                 live: true,
               }),
+              signal: AbortSignal.timeout(15_000),
             });
             log("INFO", `✅ Forwarded image signal from ${displayId} for AI analysis`);
           } else {
@@ -381,6 +384,7 @@ function startMonitoring(client: TelegramClient): void {
             messageAt: message.date ? new Date(message.date * 1000).toISOString() : null,
             live: true,
           }),
+          signal: AbortSignal.timeout(15_000),
         });
         log("INFO", `✅ Forwarded message from ${displayId} for AI analysis`);
       } catch (e) {

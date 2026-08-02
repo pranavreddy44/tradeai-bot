@@ -5,6 +5,7 @@ import {
   DEFAULT_OMNIROUTE_BASE_URL,
   DEFAULT_OMNIROUTE_MODEL,
   getConfiguredAIProvider,
+  invalidateBotSettingCache,
   OMNIROUTE_TEXT_MODELS,
   GROQ_TEXT_MODELS,
 } from '@/lib/ai-engine';
@@ -152,6 +153,7 @@ export async function PUT(request: NextRequest) {
     }
 
     const providerConfig = await getConfiguredAIProvider();
+    invalidateBotSettingCache();
     return NextResponse.json({
       success: true,
       activeProvider: providerConfig.provider,

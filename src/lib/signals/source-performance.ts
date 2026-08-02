@@ -21,10 +21,25 @@ export interface SourceStats {
   confidenceMultiplier: number; // 0.7–1.3 applied to new signals from this source
 }
 
+// Source stats are read on every new signal (confidence weighting) and on
+// leaderboard views, but only change when a user updates an outcome. A short
+// TTL collapses the 500-row scan to one query per window.
+const SOURCE_STATS_TTL_MS = 30_000;
+let sourceStatsCache: { value: SourceStats[] | null; expiresAt: number } | null = null;
+
+export function invalidateSourceStatsCache(): void {
+  sourceStatsCache = null;
+}
+
 /**
  * Compute per-source stats from all signals that have userOutcome set.
  */
 export async function getSourcePerformance(): Promise<SourceStats[]> {
+  const now = Date.now();
+  if (sourceStatsCache && sourceStatsCache.expiresAt > now) {
+    return sourceStatsCache.value ?? [];
+  }
+
   // Fetch all signals that have outcome data
   const signals = await db.tradeSignal.findMany({
     select: {
@@ -123,13 +138,16 @@ export async function getSourcePerformance(): Promise<SourceStats[]> {
   }
 
   // Sort by win rate desc (sources with enough feedback first)
-  return results.sort((a, b) => {
+  const sorted = results.sort((a, b) => {
     const aHasData = a.totalFeedback >= 3;
     const bHasData = b.totalFeedback >= 3;
     if (aHasData && !bHasData) return -1;
     if (!aHasData && bHasData) return 1;
     return b.winRate - a.winRate;
   });
+
+  sourceStatsCache = { value: sorted, expiresAt: Date.now() + SOURCE_STATS_TTL_MS };
+  return sorted;
 }
 
 /**

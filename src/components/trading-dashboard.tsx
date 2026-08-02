@@ -438,7 +438,7 @@ export function TradingDashboard() {
         }
 
         if (!signalsData.signals?.length && !positionsData.positions?.length && !newsData.news?.length) {
-          try { await fetch('/api/seed', { method: 'POST' }) } catch { /* ignore */ }
+          try { await fetch('/api/seed?confirm=true', { method: 'POST' }) } catch { /* ignore */ }
         }
       } catch {
         if (signals.length === 0) setSignals(mockSignals)

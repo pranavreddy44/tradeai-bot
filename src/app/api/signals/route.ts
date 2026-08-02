@@ -65,7 +65,7 @@ export async function GET(request: NextRequest) {
     const where: Record<string, unknown> = {};
     if (source) where.source = source;
     if (status) where.status = status;
-    if (symbol) where.symbol = { contains: symbol, mode: 'insensitive' };
+    if (symbol) where.symbol = { contains: symbol.toUpperCase() };
 
     const [signals, total] = await Promise.all([
       db.tradeSignal.findMany({

@@ -91,6 +91,9 @@ model NewsItem {
   createdAt   DateTime @default(now())
 
   @@index([relatedSymbols])
+  @@index([analyzed, createdAt])
+  @@index([sentiment, publishedAt])
+  @@index([source])
 }
 
 model BotSetting {

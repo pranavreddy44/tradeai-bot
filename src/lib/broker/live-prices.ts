@@ -8,6 +8,16 @@ function roundPrice(value: number): number {
   return Math.round(value * 100) / 100;
 }
 
+// Prices can be fetched many times for the same symbol within a single scan
+// (per-signal normalization + quality gate). A short TTL collapses those
+// repeated Yahoo calls while keeping quotes fresh enough for live trading.
+const LIVE_PRICE_TTL_MS = 10_000;
+const livePriceCache = new Map<string, { value: number | null; expiresAt: number }>();
+
+export function invalidateLivePriceCache(): void {
+  livePriceCache.clear();
+}
+
 export async function fetchYahooLivePrice(symbol: string): Promise<number | null> {
   try {
     const cleanSymbol = symbol.toUpperCase().trim();
@@ -32,7 +42,14 @@ export async function fetchYahooLivePrice(symbol: string): Promise<number | null
 
 export async function getLivePrice(symbol: string): Promise<number | null> {
   if (!isCashStockSymbol(symbol)) return null;
-  return fetchYahooLivePrice(symbol);
+
+  const now = Date.now();
+  const cached = livePriceCache.get(symbol.toUpperCase());
+  if (cached && cached.expiresAt > now) return cached.value;
+
+  const value = await fetchYahooLivePrice(symbol);
+  livePriceCache.set(symbol.toUpperCase(), { value, expiresAt: now + LIVE_PRICE_TTL_MS });
+  return value;
 }
 
 export async function normalizeSignalWithLivePrice(signal: AISignalOutput): Promise<AISignalOutput> {
