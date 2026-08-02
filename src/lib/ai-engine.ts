@@ -341,10 +341,46 @@ type ChatMessage = {
 
 interface ChatCompletionOptions {
   model?: string;
+  /** Forces this exact model even in jsonMode (per-task routing bypasses the global jsonModel pin). */
+  taskModel?: string;
   temperature?: number;
   maxTokens?: number;
   timeoutMs?: number;
   jsonMode?: boolean;
+}
+
+// ─── Per-Task Model Stacks ───────────────────────────────────────────────────
+// Each task has a primary → fallbacks chain and an anchor behavior used when the
+// whole AI chain fails. Primary/fallbacks are pinned per design; anchors are the
+// deterministic safety net (rule-based parser / reject).
+export type TaskAnchor = 'rules' | 'reject' | 'neutral';
+
+export interface TaskModelStack {
+  primary: string;
+  fallbacks: string[];
+  anchor: TaskAnchor;
+}
+
+export const TASK_MODEL_STACKS: Record<string, TaskModelStack> = {
+  telegramParse: {
+    primary: 'mistral/mistral-medium-3-5',
+    fallbacks: ['groq/openai/gpt-oss-120b', 'groq/llama-3.3-70b-versatile'],
+    anchor: 'rules',
+  },
+  qualityGate: {
+    primary: 'groq/openai/gpt-oss-120b',
+    fallbacks: ['mistral/mistral-medium-3-5', 'groq/llama-3.3-70b-versatile'],
+    anchor: 'reject',
+  },
+  visionParse: {
+    primary: 'gemini/gemini-3.5-flash',
+    fallbacks: ['openrouter/nvidia/nemotron-nano-12b-v2-vl:free'],
+    anchor: 'rules',
+  },
+};
+
+export function getTaskModelStack(task: string): TaskModelStack | undefined {
+  return TASK_MODEL_STACKS[task];
 }
 
 export interface ConfiguredAIProvider {
@@ -421,7 +457,12 @@ export async function callConfiguredChatCompletion(
     baseUrl = process.env.OMNIROUTE_BASE_URL
       || await getBotSetting('omniRouteBaseUrl')
       || DEFAULT_OMNIROUTE_BASE_URL;
-    if (options.jsonMode) {
+    if (options.taskModel) {
+      // Per-task routing override — wins over both the global jsonModel pin
+      // and the configured model so each task can use its own primary/fallback
+      // stack (see TASK_MODEL_STACKS).
+      model = options.taskModel;
+    } else if (options.jsonMode) {
       // Pin structured-JSON calls to a fixed model verified to honor
       // json_object. Combo routing (auto/best-reasoning) can silently fall
       // back to models that return broken JSON (e.g. felo-chat), so never
@@ -510,6 +551,41 @@ export async function callConfiguredChatCompletion(
   }
   
   throw new Error('AI Engine retry loop failed unexpectedly');
+}
+
+// ─── Per-Task Model Stack Runner ─────────────────────────────────────────────
+// Runs a task's primary → fallback model chain. Only throws once every model in
+// the stack has failed, so the caller can apply the task's anchor behavior
+// (rules / reject / neutral).
+
+export async function callConfiguredChatCompletionWithTask(
+  task: string,
+  messages: ChatMessage[],
+  options: ChatCompletionOptions = {}
+): Promise<{ content: string; model: string }> {
+  const stack = getTaskModelStack(task);
+  if (!stack) {
+    return callConfiguredChatCompletion(messages, options);
+  }
+
+  const chain = [stack.primary, ...stack.fallbacks];
+  let lastError: unknown;
+
+  for (const model of chain) {
+    try {
+      return await callConfiguredChatCompletion(messages, { ...options, taskModel: model });
+    } catch (err) {
+      lastError = err;
+      console.warn(
+        `[AI Engine] ${task} stack: model ${model} failed, trying next in chain:`,
+        err instanceof Error ? err.message.slice(0, 160) : err
+      );
+    }
+  }
+
+  throw lastError instanceof Error
+    ? lastError
+    : new Error(`All models in ${task} stack failed`);
 }
 
 // ─── Rule-based Telegram Signal Parser (NO AI needed!) ─────────────────────
@@ -1061,6 +1137,14 @@ export async function qualityGateTelegramParseResult(result: TelegramParseResult
   }
 
   if (accepted.length === 0) {
+    // AI quality-gate escalation: the rule-based enrichment rejected the parse.
+    // Re-verify the raw message with the qualityGate model stack (gpt-oss-120b
+    // primary) before giving up — this rescues ambiguous but real signals.
+    const rechecked = await aiQualityGateRecheck(result, message).catch(() => null);
+    if (rechecked && rechecked.isValid && (rechecked.signal || (rechecked.signals || []).length > 0)) {
+      return rechecked;
+    }
+
     const symbolFromSignal = rawSignals[0]?.symbol || null;
     const finalSymbol = symbolFromSignal || resolvedSymbol;
     const livePrice = finalSymbol ? await getLivePrice(finalSymbol).catch(() => null) : null;
@@ -1112,6 +1196,94 @@ export async function qualityGateBatchResult(result: BatchTelegramParseResult, m
   }
 
   return { results };
+}
+
+// ─── AI Quality-Gate Recheck ──────────────────────────────────────────────────
+// When the rule-based enrichment rejects an AI parse, re-verify the raw message
+// with the qualityGate model stack (gpt-oss-120b primary → mistral → llama-70b)
+// before falling through to the rule anchor. Returns null on failure or if the
+// recheck itself rejects.
+
+const QUALITY_GATE_RECHECK_PROMPT = `You are the final quality gate for an Indian stock trading signal pipeline. An earlier AI parse of a Telegram message was REJECTED by rule-based validation.
+
+Re-read the message carefully and decide: is this a real, actionable trade signal (BUY/SELL with symbol and price levels), or not?
+
+Rules:
+- Ignore legal disclaimers, ads, greetings, P&L updates, and announcements with no tradable symbol.
+- A real signal needs a symbol + clear trade direction (BUY/SELL or bullish/bearish intent).
+- If entry is missing, use the most prominent price reference. If target is missing, estimate 4% in trade direction. If stop loss is missing, estimate 2% against direction.
+- Confidence 80+ = explicit levels, 60-79 = clear intent with some estimation, 50-65 = partial signal.
+- If you cannot confidently produce a valid signal, output {"isValid": false}.
+
+Output ONLY valid JSON:
+{"isValid": true, "signal": {"symbol": "RELIANCE", "action": "BUY", "entryPrice": 2900, "targetPrice": 2980, "stopLoss": 2860, "confidence": 75}, "reasoning": "..."}
+or
+{"isValid": false, "reasoning": "Not a real trade signal"}`;
+
+async function aiQualityGateRecheck(
+  previous: TelegramParseResult,
+  message: string
+): Promise<TelegramParseResult | null> {
+  const prior = JSON.stringify({
+    isValid: previous.isValid,
+    signal: previous.signal,
+    signals: previous.signals,
+    reasoning: previous.reasoning,
+  });
+
+  let completion: { content: string; model: string };
+  try {
+    completion = await callConfiguredChatCompletionWithTask('qualityGate', [
+      { role: 'system', content: QUALITY_GATE_RECHECK_PROMPT },
+      { role: 'user', content: `=== MESSAGE ===\n${message}\n\n=== EARLIER (REJECTED) AI PARSE ===\n${prior}` },
+    ], {
+      temperature: 0.1,
+      maxTokens: 800,
+      jsonMode: true,
+      timeoutMs: 45_000,
+    });
+  } catch (err) {
+    console.warn('[AI Engine] Quality-gate AI recheck failed (using rule anchor):', err instanceof Error ? err.message.slice(0, 120) : err);
+    return null;
+  }
+
+  const rechecked = parseAIResponse<TelegramParseResult>(completion.content, {
+    isValid: false,
+    reasoning: 'Quality-gate recheck produced no parse',
+  });
+
+  const rawSignals = [
+    ...(rechecked.signal ? [rechecked.signal] : []),
+    ...(rechecked.signals || []),
+  ];
+
+  const accepted: AISignalOutput[] = [];
+  for (const signal of rawSignals) {
+    const enriched = enrichSignalQuality({
+      ...signal,
+      reasoning: rechecked.reasoning || 'Telegram signal re-verified by quality gate',
+    }, {
+      source: 'telegram',
+      telegramText: message,
+      minConfidence: 60,
+      minRewardRisk: 1.6,
+      isDynamicallyResolved: false,
+    });
+    if (enriched) accepted.push(enriched);
+  }
+
+  if (!rechecked.isValid || accepted.length === 0) {
+    return null;
+  }
+
+  return {
+    isValid: true,
+    signal: accepted[0],
+    signals: accepted,
+    source: 'text',
+    modelName: completion.model,
+    reasoning: `${rechecked.reasoning || accepted[0].reasoning} | Recovered by AI quality gate (${completion.model}).`,
+  };
 }
 
 // ─── AI + Fallback News Analysis ─────────────────────────────────────────────
@@ -1374,7 +1546,7 @@ export async function batchParseTelegramSignals(
       const numberedMessages = batch.map((msg, idx) => `[Message ${i + idx}]\n${msg}`).join('\n\n---\n\n');
 
       try {
-        const completion = await callConfiguredChatCompletion([
+        const completion = await callConfiguredChatCompletionWithTask('telegramParse', [
           { role: 'system', content: BATCH_TELEGRAM_PARSE_PROMPT },
           { role: 'user', content: `Parse these ${batch.length} Telegram messages:\n\n${numberedMessages}` },
         ], {
@@ -1509,7 +1681,7 @@ export async function parseTelegramSignal(
       ? `=== PRECEDING MESSAGE IN CHANNEL (FOR CONTEXT) ===\n${context.previousMessage}\n\n=== CURRENT MESSAGE TO PARSE ===\n${message}`
       : message;
 
-    const completion = await callConfiguredChatCompletion([
+    const completion = await callConfiguredChatCompletionWithTask('telegramParse', [
       { role: 'system', content: TELEGRAM_PARSE_SYSTEM_PROMPT },
       { role: 'user', content: userPrompt },
     ], {
@@ -1979,10 +2151,17 @@ export async function callConfiguredVisionParser(
     || DEFAULT_OMNIROUTE_BASE_URL;
   const preferredProvider = await getBotSetting('aiProvider') || 'omniroute';
 
+  // Build the vision model chain from the visionParse task stack. The configured
+  // vision model (env/setting) wins as primary, then the stack fallbacks apply.
+  const stack = getTaskModelStack('visionParse');
+  const configuredVisionModel = process.env.OMNIROUTE_VISION_MODEL
+    || await getBotSetting('omniRouteVisionModel')
+    || (stack?.primary || 'oc/mimo-v2.5-free');
+
   let provider: 'omniroute' | 'groq' = 'omniroute';
   let token = '';
-  let model = '';
   let baseUrl = '';
+  const modelChain: string[] = [];
 
   if (preferredProvider === 'omniroute') {
     // OmniRoute first priority (works zero-config, no key required). Use a
@@ -1990,25 +2169,50 @@ export async function callConfiguredVisionParser(
     // text-only models that reject images). Override via OMNIROUTE_VISION_MODEL.
     provider = 'omniroute';
     token = omniRouteToken;
-    model = process.env.OMNIROUTE_VISION_MODEL
-      || await getBotSetting('omniRouteVisionModel')
-      || 'oc/mimo-v2.5-free';
     baseUrl = omniRouteBaseUrl;
+    modelChain.push(configuredVisionModel, ...(stack?.fallbacks || []));
   } else if (groqApiKey) {
     provider = 'groq';
     token = groqApiKey;
-    model = 'meta-llama/llama-4-scout-17b-16e-instruct';
+    modelChain.push('meta-llama/llama-4-scout-17b-16e-instruct');
     baseUrl = 'https://api.groq.com/openai/v1/chat/completions';
   } else {
     // Fall back to OmniRoute (zero-config) when Groq is preferred but not configured
     provider = 'omniroute';
     token = omniRouteToken;
-    model = process.env.OMNIROUTE_VISION_MODEL
-      || await getBotSetting('omniRouteVisionModel')
-      || 'oc/mimo-v2.5-free';
     baseUrl = omniRouteBaseUrl;
+    modelChain.push(configuredVisionModel, ...(stack?.fallbacks || []));
   }
 
+  const uniqueChain = [...new Set(modelChain)].filter(Boolean);
+
+  let lastError: unknown;
+  for (const model of uniqueChain) {
+    try {
+      return await attemptVisionModel(provider, baseUrl, token, model, base64Image, mimeType, prompt);
+    } catch (err) {
+      lastError = err;
+      console.warn(
+        `[AI Engine] Vision ${model} failed, trying next in visionParse chain:`,
+        err instanceof Error ? err.message.slice(0, 160) : err
+      );
+    }
+  }
+
+  throw lastError instanceof Error
+    ? lastError
+    : new Error('AI Engine vision chain failed unexpectedly');
+}
+
+async function attemptVisionModel(
+  provider: 'omniroute' | 'groq',
+  baseUrl: string,
+  token: string,
+  model: string,
+  base64Image: string,
+  mimeType: string,
+  prompt: string
+): Promise<{ content: string; model: string }> {
   console.log(`[AI Engine] Vision completion using ${provider}: ${model}`);
 
   const maxRetries = 2;
